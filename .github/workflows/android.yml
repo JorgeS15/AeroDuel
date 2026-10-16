@@ -1,0 +1,95 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["godot/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["godot/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.5.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache do Godot e dos templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}
+
+      - name: Instalar Godot e templates de exportação
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          if [ ! -x ~/godot/godot ]; then
+            mkdir -p ~/godot
+            curl -fsSL -o /tmp/godot.zip "$BASE/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -q /tmp/godot.zip -d ~/godot
+            mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          fi
+          TPL=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          if [ ! -f "$TPL/android_debug.apk" ]; then
+            mkdir -p "$TPL"
+            curl -fsSL -o /tmp/templates.tpz "$BASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            unzip -q -j /tmp/templates.tpz "templates/android_*" "templates/version.txt" -d "$TPL"
+            rm /tmp/templates.tpz
+          fi
+          ls "$TPL"
+
+      - name: Configurar exportação Android (SDK e chave de debug)
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore ~/debug.keystore -storepass android -alias androiddebugkey \
+            -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          mkdir -p ~/.config/godot
+          MINOR="${GODOT_VERSION%.*}"
+          for f in editor_settings-4.tres "editor_settings-${MINOR}.tres"; do
+            cat > ~/.config/godot/$f <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          done
+
+      - name: Importar projeto
+        run: ~/godot/godot --headless --path godot --import
+
+      - name: Teste de simulação (bot contra bot)
+        run: ~/godot/godot --headless --path godot res://tests/sim_test.tscn
+
+      - name: Exportar APK de debug
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          ~/godot/godot --headless --path godot --export-debug "Android" "$GITHUB_WORKSPACE/build/AeroDuel-debug.apk"
+          ls -la build
+          test -s build/AeroDuel-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AeroDuel-debug-apk
+          path: build/AeroDuel-debug.apk
+          if-no-files-found: error
