@@ -10,6 +10,7 @@ signal tapped
 @export var tint := Color(1, 1, 1)
 
 var pressed := false
+var hit_scale := 1.2   ## raio da zona de toque em relação ao círculo desenhado
 var _touches := {}
 
 
@@ -47,7 +48,7 @@ func _input(event: InputEvent) -> void:
 
 func _hit(pos: Vector2) -> bool:
 	var r := get_global_rect()
-	return pos.distance_to(r.get_center()) <= r.size.x * 0.6
+	return pos.distance_to(r.get_center()) <= r.size.x * 0.5 * hit_scale
 
 
 func _refresh() -> void:
@@ -64,10 +65,10 @@ func _draw() -> void:
 	var c := size * 0.5
 	var r := size.x * 0.5
 	var fill := tint
-	fill.a = 0.45 if pressed else 0.18
+	fill.a = 0.4 if pressed else 0.12
 	draw_circle(c, r, fill)
-	draw_arc(c, r - 0.5, 0, TAU, 32, Color(tint, 0.7), 1.0, true)
+	draw_arc(c, r - 0.5, 0, TAU, 32, Color(tint, 0.55), 0.8, true)
 	var font := get_theme_default_font()
-	var fs := 13 if label.length() <= 2 else 7
+	var fs := 13 if label.length() <= 2 else (7 if r >= 15.0 else 5)
 	var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	draw_string(font, Vector2(c.x - w * 0.5, c.y + fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)

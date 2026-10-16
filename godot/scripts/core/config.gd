@@ -14,7 +14,7 @@ const GRAVITY := 55.0
 const BULLET_LIFE := 1.1
 const WIN_SCORE := 10
 const RESPAWN_TIME := 2.5
-const WALK_SPEED := 16.0
+const WALK_SPEED := 32.0
 
 const TEAM_BODY := [Color("#2f6fd6"), Color("#d63a2f")]
 const TEAM_WING := [Color("#9cc3ff"), Color("#ffb19c")]

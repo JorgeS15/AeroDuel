@@ -7,6 +7,7 @@ const DIFFICULTIES := {
 	"facil":   { "reaction": 0.35, "noise": 0.30, "cone": 0.10, "range": 110.0, "trigger": 0.35, "hunt_pilots": false },
 	"normal":  { "reaction": 0.18, "noise": 0.14, "cone": 0.14, "range": 140.0, "trigger": 0.7,  "hunt_pilots": true },
 	"dificil": { "reaction": 0.08, "noise": 0.05, "cone": 0.18, "range": 170.0, "trigger": 1.0,  "hunt_pilots": true },
+	"as":      { "reaction": 0.07, "noise": 0.06, "cone": 0.18, "range": 175.0, "trigger": 1.0,  "hunt_pilots": false },   # o ás não dispara sobre pilotos
 }
 
 var _t := 0.0          ## tempo até rever a pontaria
@@ -100,6 +101,16 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 			if crate_rel.length() < 130.0 and crate_rel.length() < enemy_dist * 0.7:
 				valid = false
 				desired = crate_rel.angle()
+		# a jogar no lugar do jogador (testes): ir atrás dos balões da missão
+		if side.id == world.me and not world.balloons.is_empty():
+			var best := INF
+			for bl in world.balloons:
+				var dd := Config.dist2(p.position, bl.position)
+				if not bl.dead and dd < best:
+					best = dd
+					tpos = bl.position
+					tvel = Vector2.ZERO
+					valid = true
 		if valid:
 			var rel := Vector2(Config.dx_wrap(p.position.x, tpos.x), tpos.y - p.position.y)
 			dist = rel.length()
@@ -113,6 +124,15 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 		elif is_nan(desired):
 			var cruise_y := 100.0 if passive else 70.0
 			desired = atan2((cruise_y - p.position.y) * 0.5, 60.0 * facing)   # patrulhar a meia altura
+
+		# ataque ao hangar: voar até por cima dele e largar bombas (dispara só se calhar)
+		if side.raid:
+			var hx := Config.hangar_x(1 - side.id)
+			var hdx := Config.dx_wrap(p.position.x, hx)
+			var heading := signf(hdx) if absf(hdx) > 40.0 else facing
+			desired = atan2((80.0 - p.position.y) * 0.5, heading * 60.0)
+			if p.bombs > 0 and absf(Config.dx_wrap(p.position.x + p.velocity().x * 0.6, hx)) < 10.0:
+				inp.bomb = true
 
 		var alt := Config.GROUND - p.position.y
 		# não mergulhar a pique perto do chão

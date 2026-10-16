@@ -10,6 +10,9 @@ var respawn := 0.0           ## segundos até receber um avião novo
 var input: InputState
 var brain: BotBrain = null
 var plane_type: PlaneType
+var colors: Array = []       ## [fuselagem, asas]; vazio = cores da equipa
+var raid := false            ## bot de ataque ao hangar (missões de defesa)
+var difficulty := ""         ## dificuldade própria deste bot ("" = a do mundo)
 
 
 func _init(p_id: int, p_is_bot: bool, p_input: InputState, p_type: PlaneType) -> void:
@@ -19,3 +22,11 @@ func _init(p_id: int, p_is_bot: bool, p_input: InputState, p_type: PlaneType) ->
 	plane_type = p_type
 	if is_bot:
 		brain = BotBrain.new()
+
+
+func body_color() -> Color:
+	return colors[0] if colors.size() >= 2 else Config.TEAM_BODY[id]
+
+
+func wing_color() -> Color:
+	return colors[1] if colors.size() >= 2 else Config.TEAM_WING[id]

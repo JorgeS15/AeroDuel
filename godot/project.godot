@@ -23,6 +23,7 @@ config/icon="res://icon.svg"
 Game="*res://scripts/autoload/game.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 Updater="*res://scripts/autoload/updater.gd"
+Progress="*res://scripts/autoload/progress.gd"
 
 [display]
 
