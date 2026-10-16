@@ -2,16 +2,43 @@ extends Node
 ## Autoload "Game": definições guardadas, mapa de teclas e tema da interface.
 
 const SETTINGS_PATH := "user://settings.cfg"
+const BUILD_INFO_PATH := "res://build.json"   ## escrito pelo CI; não existe em builds locais
 
 var difficulty := "normal"
 var sound_on := true
 var ui_theme: Theme
+## Versão, n.º do build, canal (latest / pr-N) e commit deste APK.
+var build := { "version": "", "build": 0, "channel": "", "commit": "local" }
 
 
 func _ready() -> void:
 	_setup_input()
+	_load_build_info()
 	ui_theme = _make_theme()
 	_load_settings()
+
+
+## Texto curto para mostrar no ecrã, ex.: "v0.1.0 · build 7 · pr-2 · 81cb40b".
+func version_text() -> String:
+	var parts := ["v" + str(build.version)]
+	if int(build.build) > 0:
+		parts.append("build %d" % int(build.build))
+	if not str(build.channel).is_empty():
+		parts.append(str(build.channel))
+	parts.append(str(build.commit))
+	if OS.is_debug_build():
+		parts.append("debug")
+	return " · ".join(parts)
+
+
+func _load_build_info() -> void:
+	build.version = str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	if not FileAccess.file_exists(BUILD_INFO_PATH):
+		return
+	var data = JSON.parse_string(FileAccess.get_file_as_string(BUILD_INFO_PATH))
+	if typeof(data) == TYPE_DICTIONARY:
+		for key in data:
+			build[key] = data[key]
 
 
 func save_settings() -> void:

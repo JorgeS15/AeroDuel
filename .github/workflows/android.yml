@@ -77,6 +77,26 @@ jobs:
           EOF
           done
 
+      - name: Informação do build (versão, canal, commit)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PR_NUMBER" ]; then CHANNEL="pr-$PR_NUMBER";
+          elif [ "$GITHUB_REF_NAME" = "main" ]; then CHANNEL="latest";
+          else CHANNEL=""; fi
+          VERSION=$(sed -n 's/^config\/version="\(.*\)"/\1/p' godot/project.godot)
+          BUILD=$GITHUB_RUN_NUMBER
+          SHORT=${SHA::7}
+          printf '{"version":"%s","build":%d,"channel":"%s","commit":"%s","date":"%s"}\n' \
+            "$VERSION" "$BUILD" "$CHANNEL" "$SHORT" "$(date -u '+%Y-%m-%d %H:%M')" > godot/build.json
+          cat godot/build.json
+          # o n.º do build é o versionCode do Android: cada APK novo instala por cima do anterior
+          sed -i "s/^version\/code=.*/version\/code=$BUILD/" godot/export_presets.cfg
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$SHORT" >> "$GITHUB_ENV"
+
       - name: Importar projeto
         run: ~/godot/godot --headless --path godot --import
 
@@ -104,27 +124,24 @@ jobs:
       # O APK fica também num release, para se descarregar diretamente (sem .zip):
       #   main     -> release "latest"   (link fixo para a versão mais recente)
       #   PR n.º N -> release "pr-N"     (versão de teste desse PR)
+      # O build.json vai junto: é o que a app consulta para saber se há atualização.
       - name: Publicar APK para download direto
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: env.CHANNEL != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           cp build/AeroDuel-debug.apk build/AeroDuel.apk
-          if [ -n "$PR_NUMBER" ]; then
-            TAG="pr-$PR_NUMBER"
-            TITLE="AeroDuel — teste do PR #$PR_NUMBER"
-          elif [ "$GITHUB_REF_NAME" = "main" ]; then
-            TAG="latest"
+          cp godot/build.json build/build.json
+          if [ "$CHANNEL" = "latest" ]; then
             TITLE="AeroDuel — versão mais recente"
           else
-            echo "Sem release para $GITHUB_REF_NAME"; exit 0
+            TITLE="AeroDuel — teste do ${CHANNEL/pr-/PR #}"
           fi
-          NOTES="APK de debug gerado a partir de ${SHA::7} em $(date -u '+%Y-%m-%d %H:%M') UTC.
+          NOTES="Build $GITHUB_RUN_NUMBER, commit $SHORT_SHA, gerado em $(date -u '+%Y-%m-%d %H:%M') UTC.
 
           Instalação: descarrega AeroDuel.apk no telemóvel e abre-o (autoriza a instalação de apps desta origem)."
-          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" build/AeroDuel.apk --target "$SHA" --prerelease --title "$TITLE" --notes "$NOTES"
-          echo "### 📱 Download direto: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/AeroDuel.apk" >> "$GITHUB_STEP_SUMMARY"
+          gh release delete "$CHANNEL" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$CHANNEL" build/AeroDuel.apk build/build.json --target "$SHA" --prerelease --title "$TITLE" --notes "$NOTES"
+          echo "### 📱 Download direto: https://github.com/$GITHUB_REPOSITORY/releases/download/$CHANNEL/AeroDuel.apk" >> "$GITHUB_STEP_SUMMARY"

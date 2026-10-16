@@ -19,6 +19,8 @@ No ar guias o paraquedas com ↺ ↻. No chão, o piloto anda com os mesmos bot�
 var _main_panel: PanelContainer
 var _help_panel: PanelContainer
 var _play_btn: Button
+var _update_label: Label
+var _update_btn: Button
 
 
 func _ready() -> void:
@@ -123,18 +125,53 @@ func _ready() -> void:
 	_center(_help_panel, 340)
 	_help_panel.visible = false
 
+	# versão e atualizações (canto inferior)
+	var footer := VBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 1)
+	footer.position = Vector2(4, Config.H - 46)
+	footer.size = Vector2(Config.W - 8, 44)
+	root.add_child(footer)
+	_update_btn = Button.new()
+	_update_btn.add_theme_font_size_override("font_size", 8)
+	_update_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_update_btn.pressed.connect(Updater.open_download)
+	var update_style := StyleBoxFlat.new()
+	update_style.bg_color = Color("#2e9e4f")
+	update_style.set_corner_radius_all(4)
+	update_style.content_margin_left = 6
+	update_style.content_margin_right = 6
+	update_style.content_margin_top = 2
+	update_style.content_margin_bottom = 2
+	_update_btn.add_theme_stylebox_override("normal", update_style)
+	_update_btn.add_theme_stylebox_override("hover", update_style)
+	footer.add_child(_update_btn)
+	_update_label = Label.new()
+	_update_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_update_label.add_theme_font_size_override("font_size", 6)
+	_update_label.modulate = Color(1, 1, 1, 0.7)
+	footer.add_child(_update_label)
 	var version := Label.new()
-	version.text = "v" + str(ProjectSettings.get_setting("application/config/version", ""))
+	version.text = Game.version_text()
+	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	version.add_theme_font_size_override("font_size", 6)
-	version.modulate = Color(1, 1, 1, 0.6)
-	version.position = Vector2(Config.W - 30, Config.H - 12)
-	root.add_child(version)
+	version.modulate = Color(1, 1, 1, 0.7)
+	footer.add_child(version)
+	Updater.status_changed.connect(_refresh_update)
+	_refresh_update()
 
 
 func open() -> void:
 	visible = true
+	Updater.check()
 	_show_help(false)
 	_play_btn.grab_focus()
+
+
+func _refresh_update() -> void:
+	_update_label.text = Updater.status_text()
+	_update_btn.visible = Updater.status == Updater.Status.AVAILABLE
+	_update_btn.text = "Atualizar para o build %d" % Updater.latest_build
 
 
 func close() -> void:

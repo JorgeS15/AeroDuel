@@ -5,3 +5,4 @@
 # Builds
 *.apk
 *.aab
+build.json

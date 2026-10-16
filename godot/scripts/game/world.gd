@@ -18,6 +18,7 @@ var planes: Array[Airplane] = []
 var pilots: Array[Pilot] = []
 var bullets: Array[Bullet] = []
 var player_input := InputState.new()
+var bot_passive := false      ## modo de teste: o bot voa a direito e não dispara
 
 var background: Background
 var fx_layer: FxLayer
@@ -66,7 +67,7 @@ func step(dt: float) -> void:
 
 	for s in sides:
 		if s.is_bot:
-			s.brain.think(s, self, difficulty, dt)
+			s.brain.think(s, self, difficulty, dt, bot_passive and mode != "demo")
 
 	for p in planes:
 		if not p.dead:

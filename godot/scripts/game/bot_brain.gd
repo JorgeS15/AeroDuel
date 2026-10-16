@@ -14,7 +14,8 @@ var _noise := 0.0      ## erro de pontaria atual
 var _eject_t := 0.0
 
 
-func think(side: Side, world: World, difficulty: String, dt: float) -> void:
+## `passive` (modo de teste): voa a direito a meia altura e não dispara, como um alvo.
+func think(side: Side, world: World, difficulty: String, dt: float, passive := false) -> void:
 	var inp := side.input
 	var d: Dictionary = DIFFICULTIES[difficulty]
 	inp.clear()
@@ -56,7 +57,7 @@ func think(side: Side, world: World, difficulty: String, dt: float) -> void:
 		desired = PI / 2.0
 	else:
 		# escolher alvo
-		var target := world.sides[1 - side.id].ctrl
+		var target: Node2D = null if passive else world.sides[1 - side.id].ctrl
 		var valid := false
 		var tpos := Vector2.ZERO
 		var tvel := Vector2.ZERO
@@ -79,7 +80,8 @@ func think(side: Side, world: World, difficulty: String, dt: float) -> void:
 				_noise = randf_range(-d.noise, d.noise)
 			desired = aim + _noise
 		else:
-			desired = atan2((70.0 - p.position.y) * 0.5, 60.0 * facing)   # patrulhar a meia altura
+			var cruise_y := 100.0 if passive else 70.0
+			desired = atan2((cruise_y - p.position.y) * 0.5, 60.0 * facing)   # patrulhar a meia altura
 
 		var alt := Config.GROUND - p.position.y
 		# não mergulhar a pique perto do chão

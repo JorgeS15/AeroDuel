@@ -27,6 +27,7 @@ var _over_panel: PanelContainer
 var _over_title: Label
 var _over_score: Label
 var _sound_btn: Button
+var _bot_btn: Button
 
 
 func _ready() -> void:
@@ -82,6 +83,12 @@ func _ready() -> void:
 	_update_sound_label()
 	var pause_btn := _button("Pausa", Vector2(Config.W - 38, 20), Vector2(32, 14))
 	pause_btn.pressed.connect(func() -> void: pause_pressed.emit())
+	# só nos builds de debug: pôr o bot como alvo passivo, para testar a mecânica
+	if OS.is_debug_build():
+		_bot_btn = _button("", Vector2(Config.W - 112, 20), Vector2(38, 14))
+		_bot_btn.pressed.connect(func() -> void:
+			world.bot_passive = not world.bot_passive
+			_update_bot_label())
 
 	# controlos táteis
 	_touch = Control.new()
@@ -96,7 +103,8 @@ func _ready() -> void:
 	_touch.visible = DisplayServer.is_touchscreen_available()
 
 	# pausa
-	_pause_panel = _panel(["Pausa"], [["Continuar", resume_pressed], ["Menu principal", menu_pressed]])
+	_pause_panel = _panel(["Pausa", Game.version_text()], [["Continuar", resume_pressed], ["Menu principal", menu_pressed]])
+	_pause_panel.get_child(0).get_child(1).add_theme_font_size_override("font_size", 6)
 	# fim de jogo
 	_over_panel = _panel(["", ""], [["Jogar outra vez", again_pressed], ["Menu principal", menu_pressed]])
 	var labels := _over_panel.get_child(0).get_children()
@@ -109,6 +117,7 @@ func _ready() -> void:
 
 func show_playing(on: bool) -> void:
 	visible = on
+	_update_bot_label()
 	_pause_panel.visible = false
 	_over_panel.visible = false
 	_flash.text = ""
@@ -152,6 +161,11 @@ func _process(delta: float) -> void:
 	if _flash_t > 0.0:
 		_flash_t -= delta
 		_flash.modulate.a = clampf(_flash_t / 0.3, 0.0, 1.0)
+
+
+func _update_bot_label() -> void:
+	if _bot_btn and world:
+		_bot_btn.text = "Bot: alvo" if world.bot_passive else "Bot: ataca"
 
 
 func _toggle_sound() -> void:
