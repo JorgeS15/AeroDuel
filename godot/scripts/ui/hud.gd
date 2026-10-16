@@ -7,18 +7,21 @@ signal resume_pressed
 signal again_pressed
 signal menu_pressed
 signal eject_pressed
+signal bomb_pressed
 
 var world: World
 var btn_left: TouchButton
 var btn_right: TouchButton
 var btn_fire: TouchButton
 var btn_eject: TouchButton
+var btn_bomb: TouchButton
 
 var _root: Control
 var _score := []
 var _names := []
 var _hp: Array[HpPips] = []
 var _hint: Label
+var _powerups: Label
 var _flash: Label
 var _flash_t := 0.0
 var _touch: Control
@@ -64,6 +67,10 @@ func _ready() -> void:
 	goal.size = Vector2(Config.W, 10)
 	_root.add_child(goal)
 
+	_powerups = _label("", 7, Color.WHITE)
+	_powerups.position = Vector2(8, 16)
+	_root.add_child(_powerups)
+
 	_hint = _label("", 9, Config.WARN)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.position = Vector2(0, 30)
@@ -97,9 +104,12 @@ func _ready() -> void:
 	_root.add_child(_touch)
 	btn_left = _touch_button("↺", Vector2(24, 188), 17, Color.WHITE)
 	btn_right = _touch_button("↻", Vector2(64, 188), 17, Color.WHITE)
-	btn_eject = _touch_button("SALTAR", Vector2(318, 192), 13, Color("#ffd23f"))
-	btn_fire = _touch_button("FOGO", Vector2(358, 184), 20, Color("#ff6b6b"))
+	btn_eject = _touch_button("SALTAR", Vector2(Config.W - 66, 192), 13, Color("#ffd23f"))
+	btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, 184), 20, Color("#ff6b6b"))
+	btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 34, 146), 13, Color("#9a8cff"))
+	btn_bomb.visible = false
 	btn_eject.tapped.connect(func() -> void: eject_pressed.emit())
+	btn_bomb.tapped.connect(func() -> void: bomb_pressed.emit())
 	_touch.visible = DisplayServer.is_touchscreen_available()
 
 	# pausa
@@ -158,9 +168,26 @@ func _process(delta: float) -> void:
 		else:
 			_hp[i].set_hp(0, 0)
 	_hint.text = world.player_hint()
+	_update_powerups()
 	if _flash_t > 0.0:
 		_flash_t -= delta
 		_flash.modulate.a = clampf(_flash_t / 0.3, 0.0, 1.0)
+
+
+func _update_powerups() -> void:
+	var p := world.sides[world.me].ctrl as Airplane
+	var parts: Array[String] = []
+	if p != null and not p.dead:
+		if p.shield > 0:
+			parts.append("Escudo %d" % p.shield)
+		if p.triple_t > 0.0:
+			parts.append("Triplo %ds" % ceili(p.triple_t))
+		if p.turbo_t > 0.0:
+			parts.append("Turbo %ds" % ceili(p.turbo_t))
+		if p.bombs > 0:
+			parts.append("Bombas %d" % p.bombs)
+	_powerups.text = "  ·  ".join(parts)
+	btn_bomb.visible = p != null and p.bombs > 0 and not p.falling
 
 
 func _update_bot_label() -> void:

@@ -6,7 +6,11 @@ extends Node2D
 signal message(kind: String, side_id: int)
 signal game_over(winner_id: int)
 
-const DEFAULT_PLANE := preload("res://data/planes/biplane.tres")
+## Aviões disponíveis, pela ordem em que aparecem no menu (ficheiros em data/planes/).
+## São carregados só quando são precisos: com preload, o .tres podia ser lido antes de o
+## script PlaneType estar compilado e chegava como um Resource genérico.
+const PLANE_IDS := ["biplane", "fighter", "bomber", "triplane"]
+static var _plane_cache := {}
 
 var mode := "demo"           ## demo (bots no menu) | solo (jogador contra o bot)
 var me := 0                  ## lado controlado neste ecrã
@@ -17,6 +21,9 @@ var sides: Array[Side] = []
 var planes: Array[Airplane] = []
 var pilots: Array[Pilot] = []
 var bullets: Array[Bullet] = []
+var crates: Array[Crate] = []
+var bombs: Array[Bomb] = []
+var crate_t := 0.0            ## segundos até cair a próxima caixa
 var player_input := InputState.new()
 var bot_passive := false      ## modo de teste: o bot voa a direito e não dispara
 
@@ -36,7 +43,20 @@ func _ready() -> void:
 	add_child(entities)
 
 
-func start(p_mode: String, p_difficulty: String) -> void:
+static func plane_type(id: String) -> PlaneType:
+	if not PLANE_IDS.has(id):
+		id = "biplane"
+	if not _plane_cache.has(id):
+		_plane_cache[id] = load("res://data/planes/%s.tres" % id) as PlaneType
+	return _plane_cache[id]
+
+
+static func random_plane_id() -> String:
+	return PLANE_IDS.pick_random()
+
+
+## `player_plane` / `bot_plane`: ids de PLANE_IDS ("" = ao calhas).
+func start(p_mode: String, p_difficulty: String, player_plane := "", bot_plane := "") -> void:
 	mode = p_mode
 	difficulty = p_difficulty
 	me = 0
@@ -47,12 +67,18 @@ func start(p_mode: String, p_difficulty: String) -> void:
 	planes.clear()
 	pilots.clear()
 	bullets.clear()
+	crates.clear()
+	bombs.clear()
+	crate_t = randf_range(4.0, 7.0)
 	fx_layer.clear()
+	background.rebuild()
 	player_input.clear()
 	var demo := mode == "demo"
+	var p0 := player_plane if not player_plane.is_empty() else random_plane_id()
+	var p1 := bot_plane if not bot_plane.is_empty() else random_plane_id()
 	sides = [
-		Side.new(0, demo, InputState.new() if demo else player_input, DEFAULT_PLANE),
-		Side.new(1, true, InputState.new(), DEFAULT_PLANE),
+		Side.new(0, demo, InputState.new() if demo else player_input, plane_type(p0)),
+		Side.new(1, true, InputState.new(), plane_type(p1)),
 	]
 	for s in sides:
 		spawn_plane(s)
@@ -77,6 +103,8 @@ func step(dt: float) -> void:
 			pl.step(dt)
 
 	_step_bullets(dt)
+	_step_crates(dt)
+	_step_bombs(dt)
 	_collisions()
 
 	# novos aviões
@@ -86,6 +114,7 @@ func step(dt: float) -> void:
 			if s.respawn <= 0.0:
 				spawn_plane(s)
 		s.input.eject = false
+		s.input.bomb = false
 
 	_remove_dead()
 	fx_layer.step(dt)
@@ -106,7 +135,7 @@ func _step_bullets(dt: float) -> void:
 		for p in planes:
 			if p.dead or p.falling or p.side == b.shooter:
 				continue
-			if Config.dist2(b.pos, p.position) < 36.0:
+			if Config.dist2(b.pos, p.position) < p.type.hit_radius * p.type.hit_radius:
 				hit_plane(p)
 				b.life = 0.0
 				break
@@ -155,6 +184,78 @@ func _remove_dead() -> void:
 	planes = planes.filter(func(p: Airplane) -> bool: return not p.dead)
 	pilots = pilots.filter(func(pl: Pilot) -> bool: return not pl.dead)
 	bullets = bullets.filter(func(b: Bullet) -> bool: return b.life > 0.0)
+	for c in crates:
+		if c.dead:
+			c.queue_free()
+	crates = crates.filter(func(c: Crate) -> bool: return not c.dead)
+	bombs = bombs.filter(func(b: Bomb) -> bool: return not b.exploded)
+
+
+# ---------- Powerups e bombas ----------
+
+func _step_crates(dt: float) -> void:
+	crate_t -= dt
+	if crate_t <= 0.0:
+		crate_t = randf_range(Powerups.SPAWN_MIN, Powerups.SPAWN_MAX)
+		if crates.size() < Powerups.MAX_CRATES:
+			var c := Crate.new()
+			# longe dos hangares, para não cair logo em cima de quem está a descolar
+			c.setup(Powerups.KINDS.pick_random(), Config.W * randf_range(0.2, 0.8))
+			entities.add_child(c)
+			crates.append(c)
+	var r2 := Powerups.PICKUP_RADIUS * Powerups.PICKUP_RADIUS
+	for c in crates:
+		if c.dead:
+			continue
+		c.step(dt)
+		for p in planes:
+			if p.dead or p.falling or not p.manned:
+				continue
+			if Config.dist2(c.position, p.position) < r2:
+				c.dead = true
+				p.pickup(c.kind)
+				fx("pickup", [c.kind, p.side.id, c.position])
+				break
+
+
+func drop_bomb(p: Airplane) -> void:
+	p.bombs -= 1
+	var b := Bomb.new()
+	b.pos = p.position + Vector2(0.0, 4.0)
+	b.vel = p.velocity() * 0.8
+	b.shooter = p.side
+	bombs.append(b)
+	fx("bomb_drop", [p.side.id])
+
+
+func _step_bombs(dt: float) -> void:
+	for b in bombs:
+		b.vel.y += Config.GRAVITY * dt
+		b.vel.x *= 1.0 - 0.3 * dt
+		b.pos.x = Config.wrap_x(b.pos.x + b.vel.x * dt)
+		b.pos.y += b.vel.y * dt
+		var hit := b.pos.y >= Config.GROUND - 1.0
+		for p in planes:
+			if not hit and not p.dead and p.side != b.shooter and Config.dist2(b.pos, p.position) < 64.0:
+				hit = true
+		if hit:
+			_explode(b)
+
+
+func _explode(b: Bomb) -> void:
+	b.exploded = true
+	var at := Vector2(b.pos.x, minf(b.pos.y, Config.GROUND - 2.0))
+	fx("boom", [at, -1])
+	var r2 := Powerups.BOMB_RADIUS * Powerups.BOMB_RADIUS
+	for p in planes:
+		if p.dead or p.side == b.shooter or Config.dist2(at, p.position) > r2:
+			continue
+		for i in Powerups.BOMB_DAMAGE:
+			if not p.dead and not p.falling:
+				hit_plane(p)
+	for pl in pilots:
+		if not pl.dead and pl.side != b.shooter and Config.dist2(at, pl.position) < r2:
+			kill_pilot(pl)
 
 
 # ---------- Ações ----------
@@ -170,16 +271,30 @@ func spawn_plane(side: Side) -> Airplane:
 
 
 func fire_bullet(p: Airplane) -> void:
-	var dir := Vector2(cos(p.angle), sin(p.angle))
-	var b := Bullet.new()
-	b.pos = Vector2(Config.wrap_x(p.position.x + dir.x * 8.0), p.position.y + dir.y * 8.0)
-	b.vel = dir * (p.type.bullet_speed + p.speed * 0.5)
-	b.shooter = p.side
-	bullets.append(b)
+	var spread := [0.0]
+	if p.triple_t > 0.0:
+		spread = [0.0, -Powerups.TRIPLE_SPREAD, Powerups.TRIPLE_SPREAD]
+	for d in spread:
+		_spawn_bullet(p, p.angle + d, 8.0 * p.type.draw_scale, p.type.bullet_speed + p.speed * 0.5)
+	if p.type.rear_gun:
+		_spawn_bullet(p, p.angle + PI, 8.0 * p.type.draw_scale, p.type.bullet_speed - p.speed * 0.5)
 	fx("shoot", [p.side.id])
 
 
+func _spawn_bullet(p: Airplane, a: float, offset: float, spd: float) -> void:
+	var dir := Vector2(cos(a), sin(a))
+	var b := Bullet.new()
+	b.pos = Vector2(Config.wrap_x(p.position.x + dir.x * offset), p.position.y + dir.y * offset)
+	b.vel = dir * spd
+	b.shooter = p.side
+	bullets.append(b)
+
+
 func hit_plane(p: Airplane) -> void:
+	if p.shield > 0:
+		p.shield -= 1
+		fx("shield_hit", [p.position, p.side.id])
+		return
 	p.hp -= 1
 	p.hit_t = 0.12
 	fx("hit", [p.position, p.side.id])
@@ -303,6 +418,17 @@ func fx(event: String, args: Array) -> void:
 		"msg":
 			if live:
 				message.emit(args[0], args[1])
+		"pickup":
+			fx_layer.puff(args[2], Powerups.info(args[0]).color, 10, 35.0, 0.5, 1.4, 0.0)
+			if args[1] == me:
+				_sfx("repair")
+			if live:
+				message.emit("pickup:" + args[0], args[1])
+		"shield_hit":
+			fx_layer.puff(args[0], Color("#5ec8ff"), 8, 40.0, 0.3, 1.2, 0.0)
+			_sfx("hit")
+		"bomb_drop":
+			_sfx("eject")
 
 
 func _sfx(name: String) -> void:
@@ -357,6 +483,9 @@ func player_hint() -> String:
 func message_text(kind: String, side_id: int) -> Array:
 	var mine := side_id == me
 	var foe := "Bot"
+	if kind.begins_with("pickup:"):
+		var pname: String = Powerups.info(kind.substr(7)).name
+		return ["%s!" % pname, Powerups.info(kind.substr(7)).color] if mine else ["%s apanhou: %s" % [foe, pname], Config.WARN]
 	match kind:
 		"plane_crew":
 			return ["Caíste com o avião! %s +2" % foe, Config.BAD] if mine else ["Avião e piloto inimigos abatidos! +2", Config.GOOD]

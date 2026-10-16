@@ -31,7 +31,7 @@ window/size/viewport_height=216
 window/size/window_width_override=1152
 window/size/window_height_override=648
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
+window/stretch/aspect="keep_height"
 window/handheld/orientation=4
 
 [physics]

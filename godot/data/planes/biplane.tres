@@ -4,5 +4,6 @@
 
 [resource]
 script = ExtResource("1_type")
+id = "biplane"
 display_name = "Biplano"
-description = "Equilibrado. Aguenta três tiros e dispara cinco vezes por segundo."
+description = "Equilibrado. Aguenta 3 tiros."

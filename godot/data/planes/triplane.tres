@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="PlaneType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/plane_type.gd" id="1_type"]
+
+[resource]
+script = ExtResource("1_type")
+id = "triplane"
+display_name = "Triplano"
+description = "Sobe como ninguém e quase não entra em perda, mas é lento."
+style = "triplane"
+thrust = 57.0
+drag = 0.82
+stall_speed = 17.0
+takeoff_speed = 32.0
+turn_rate = 3.4
+max_hp = 3
+fire_cooldown = 0.22
+bullet_speed = 165.0

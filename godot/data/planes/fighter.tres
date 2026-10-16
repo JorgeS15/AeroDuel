@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="PlaneType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/plane_type.gd" id="1_type"]
+
+[resource]
+script = ExtResource("1_type")
+id = "fighter"
+display_name = "Caça"
+description = "Rápido e com rotação apertada, mas só aguenta 2 tiros."
+style = "fighter"
+hit_radius = 5.5
+thrust = 72.0
+drag = 0.8
+stall_speed = 30.0
+takeoff_speed = 46.0
+turn_rate = 3.6
+max_hp = 2
+fire_cooldown = 0.16
+bullet_speed = 190.0
