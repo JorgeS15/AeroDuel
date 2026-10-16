@@ -1,0 +1,190 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #0b1020;
+  color: #fff;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.hidden { display: none !important; }
+
+#wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#stage { position: relative; }
+canvas { display: block; }
+
+/* ---------- HUD ---------- */
+#hud {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px;
+  pointer-events: none;
+  font-weight: 800;
+  font-size: clamp(13px, 2.4vw, 22px);
+  text-shadow: 0 1px 3px #000a;
+}
+#hud .s0 .name { color: #9cc3ff; }
+#hud .s1 .name { color: #ffb19c; }
+#hud .goal { font-size: 0.65em; opacity: 0.85; }
+#hud .hp { font-size: 0.7em; letter-spacing: 1px; }
+
+#flash {
+  position: absolute;
+  top: 28%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: clamp(16px, 3.6vw, 32px);
+  text-shadow: 0 2px 4px #000c;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+#flash.show { opacity: 1; }
+
+#hint {
+  position: absolute;
+  top: 14%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-weight: 700;
+  font-size: clamp(12px, 2.2vw, 18px);
+  color: #fff6c2;
+  text-shadow: 0 1px 3px #000c;
+  pointer-events: none;
+}
+
+#topbtns {
+  position: absolute;
+  top: 34px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+#topbtns button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #ffffff44;
+  background: #0006;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* ---------- Controlos táteis ---------- */
+#touch {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  pointer-events: none;
+  z-index: 5;
+}
+#touch .group { display: flex; gap: 14px; align-items: flex-end; }
+.tbtn {
+  pointer-events: auto;
+  touch-action: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #ffffff22;
+  border: 2px solid #ffffff66;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.tbtn.on { background: #ffffff66; }
+#bFire { width: 86px; height: 86px; font-size: 15px; background: #ff4d4d44; border-color: #ff9a9a; }
+#bFire.on { background: #ff4d4daa; }
+#bEject { width: 62px; height: 62px; font-size: 11px; background: #ffd23f33; border-color: #ffe27a; }
+#bEject.on { background: #ffd23faa; }
+
+#rotate {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  text-align: center;
+  background: #ffd23f;
+  color: #222;
+  font-weight: 700;
+  z-index: 20;
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate { display: block; }
+}
+
+/* ---------- Menus ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #0b102088;
+  z-index: 10;
+}
+.panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 100%;
+  overflow: auto;
+  padding: 18px 22px;
+  border-radius: 14px;
+  border: 1px solid #ffffff22;
+  background: #141b33ee;
+  text-align: center;
+}
+h1 { margin: 0 0 6px; font-size: clamp(26px, 5vw, 40px); letter-spacing: 1px; }
+h2 { margin: 0 0 10px; font-size: clamp(22px, 4vw, 32px); }
+.sub { margin: 0 0 14px; opacity: 0.85; line-height: 1.4; }
+
+.panel button {
+  display: inline-block;
+  margin: 4px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #ffffff33;
+  background: #ffffff14;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.panel button.big { display: block; width: 100%; margin: 10px 0 6px; padding: 14px; font-size: 20px; background: #2f6fd6; border-color: #9cc3ff; }
+.diff button.sel { background: #ffd23f; color: #222; border-color: #ffd23f; }
+
+.help { margin-top: 10px; text-align: left; font-size: 14px; line-height: 1.45; }
+.help summary { cursor: pointer; text-align: center; font-weight: 700; opacity: 0.9; }
+.help ul { padding-left: 20px; margin: 8px 0; }

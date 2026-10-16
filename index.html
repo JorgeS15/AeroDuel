@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>AeroDuel</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="hud" class="hidden">
+      <div class="side s0"><span class="name">TU</span> <span id="score0">0</span> <span id="hp0" class="hp"></span></div>
+      <div class="goal">Primeiro a <span id="goal">10</span></div>
+      <div class="side s1"><span id="hp1" class="hp"></span> <span id="score1">0</span> <span class="name">BOT</span></div>
+    </div>
+    <div id="flash"></div>
+    <div id="hint"></div>
+    <div id="topbtns" class="hidden">
+      <button id="btnSound" title="Som">🔊</button>
+      <button id="btnPause" title="Pausa (P)">⏸</button>
+    </div>
+  </div>
+</div>
+
+<div id="touch" class="hidden">
+  <div class="group">
+    <button class="tbtn" id="bLeft" aria-label="Rodar para a esquerda">↺</button>
+    <button class="tbtn" id="bRight" aria-label="Rodar para a direita">↻</button>
+  </div>
+  <div class="group">
+    <button class="tbtn" id="bEject">SALTAR</button>
+    <button class="tbtn" id="bFire">FOGO</button>
+  </div>
+</div>
+
+<div id="rotate">📱↻ Roda o telemóvel para a horizontal</div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>AeroDuel</h1>
+    <p class="sub">Abate o avião inimigo. Se fores atingido, salta de paraquedas e corre para o teu hangar para ires buscar outro avião!</p>
+    <div class="diff">
+      <button data-d="facil">Fácil</button>
+      <button data-d="normal" class="sel">Normal</button>
+      <button data-d="dificil">Difícil</button>
+    </div>
+    <button id="play" class="big">▶ Jogar</button>
+    <details class="help">
+      <summary>Como se joga</summary>
+      <ul>
+        <li><b>Rodar:</b> ↺ ↻ &nbsp;(teclado: ← → ou A D)</li>
+        <li><b>Disparar:</b> FOGO &nbsp;(Espaço ou J)</li>
+        <li><b>Saltar de paraquedas:</b> SALTAR &nbsp;(E ou K)</li>
+        <li><b>Pausa:</b> P ou Esc</li>
+      </ul>
+      <ul>
+        <li>O avião acelera sozinho. Para descolar, espera que ganhe velocidade e puxa o nariz para cima.</li>
+        <li>Se subires a direito durante muito tempo perdes velocidade e <b>entras em perda</b>: aponta o nariz para baixo para recuperar.</li>
+        <li>Para aterrar, toca no chão quase na horizontal. Se passares pelo teu hangar, o avião fica reparado.</li>
+        <li>Avião abatido: +1 ponto. Piloto eliminado: +1 ponto. Se ficares dentro do avião quando ele cai, o adversário ganha os dois pontos, por isso salta!</li>
+        <li>No ar, guias o paraquedas com ↺ ↻. No chão, o piloto anda com os mesmos botões.</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel">
+    <h2>Pausa</h2>
+    <button id="resume" class="big">▶ Continuar</button>
+    <button id="quit">Menu principal</button>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="panel">
+    <h2 id="overTitle">Ganhaste!</h2>
+    <p id="overScore" class="sub"></p>
+    <button id="again" class="big">↻ Jogar outra vez</button>
+    <button id="toMenu">Menu principal</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
