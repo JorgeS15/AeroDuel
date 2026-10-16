@@ -77,6 +77,14 @@ func _draw_hangar(id: int) -> void:
 	draw_rect(Rect2(x - 11, g - 11, 22, 11), Color("#d8c69c"))
 	draw_colored_polygon(PackedVector2Array([Vector2(x - 13, g - 11), Vector2(x, g - 18), Vector2(x + 13, g - 11)]), Config.TEAM_BODY[id])
 	draw_rect(Rect2(x - 6, g - 8, 12, 8), Color("#3b2f22"))
+	# missões de defesa: barra de resistência e fumo quando danificado
+	if world and world.mission.has("hangar_hp") and id == world.me:
+		var full := float(world.mission.hangar_hp)
+		var k := clampf(world.hangar_hp / full, 0.0, 1.0)
+		draw_rect(Rect2(x - 11, g - 23, 22, 2.5), Color(0, 0, 0, 0.5))
+		draw_rect(Rect2(x - 11, g - 23, 22 * k, 2.5), Config.GOOD if k > 0.5 else Config.BAD)
+		for i in int((1.0 - k) * 4.0):
+			draw_circle(Vector2(x - 6 + i * 4, g - 14 - fmod(t * 6.0 + i * 3.0, 8.0)), 2.0, Color(0.2, 0.2, 0.2, 0.5))
 	# bandeira
 	var fx := x + 9 if id == 0 else x - 9
 	draw_rect(Rect2(fx, g - 27, 0.8, 16), Color("#444444"))

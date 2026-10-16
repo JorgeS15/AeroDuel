@@ -23,12 +23,18 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
 | + | Reparação | Vida cheia |
 | B | Bombas | 2 bombas: botão BOMBA ou tecla B. Rebentam no chão ou ao tocar num avião e apanham aviões e pilotos à volta |
 
-- **Bot:** 3 dificuldades. Também vai buscar caixas e bombardeia alvos no chão.
+- **Campanha:** 4 missões na região 1 (Costa), cada uma com até 3 estrelas: cumprir, uma condição extra e um tempo de referência.
+  1. *Primeiro voo:* abater 3 aviões.
+  2. *Balões de observação:* destruir 4 balões contra o relógio.
+  3. *Defender o hangar:* abater 4 bombardeiros antes que destruam o hangar.
+  4. *O Ás Negro:* vencer o melhor piloto inimigo.
+- **Progresso** (guardado no telemóvel): moedas por abates, missões e estrelas novas. No **hangar** compras aviões, 3 melhorias por avião (motor, blindagem, metralhadora) e pinturas. Na campanha só podes usar os aviões que compraste; no duelo livre estão todos disponíveis.
+- **Bot:** 3 dificuldades e o "ás" das missões. Também vai buscar caixas e bombardeia alvos no chão.
 - **Ecrã inteiro:** a largura do mundo acompanha o formato do telemóvel, sem barras pretas.
 - **Controlos táteis** com multitoque, vibração e sons.
 - **Builds de debug:** botão "Bot: ataca/alvo", versão do build no menu e aviso de atualização.
 
-Para criar um avião novo, junta um `.tres` a `data/planes/` e o id a `World.PLANE_IDS`. Os números dos powerups estão em `scripts/data/powerups.gd`.
+Para criar um avião novo, junta um `.tres` a `data/planes/` e o id a `World.PLANE_IDS`. Os números dos powerups estão em `scripts/data/powerups.gd`. As missões estão em `scripts/data/campaign.gd`, e os preços e melhorias em `scripts/autoload/progress.gd`.
 
 ## Instalar no telemóvel
 
@@ -60,7 +66,7 @@ godot/
 │   ├── ui/                hud, main_menu, touch_button
 │   └── autoload/          Game (definições, teclas, tema) e Sfx (sons gerados por código)
 └── tests/
-    ├── sim_test.tscn      cada avião contra cada avião + 10 min por dificuldade, com limites mínimos (corre no CI)
+    ├── sim_test.tscn      cada avião contra cada avião, 10 min por dificuldade e as missões jogadas por um bot (corre no CI)
     └── screenshots.tscn   capturas de ecrã do menu e do jogo
 ```
 

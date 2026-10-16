@@ -8,6 +8,8 @@ signal again_pressed
 signal menu_pressed
 signal eject_pressed
 signal bomb_pressed
+signal next_mission_pressed
+signal retry_pressed
 
 var world: World
 var btn_left: TouchButton
@@ -29,6 +31,12 @@ var _pause_panel: PanelContainer
 var _over_panel: PanelContainer
 var _over_title: Label
 var _over_score: Label
+var _goal: Label
+var _result_panel: PanelContainer
+var _result_title: Label
+var _result_stars: Label
+var _result_detail: Label
+var _next_btn: Button
 var _sound_btn: Button
 var _bot_btn: Button
 
@@ -61,11 +69,11 @@ func _ready() -> void:
 			row.position = Vector2(Config.W - 128, 2)
 			row.size = Vector2(120, 16)
 		_root.add_child(row)
-	var goal := _label("Primeiro a %d" % Config.WIN_SCORE, 7, Color(1, 1, 1, 0.85))
-	goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	goal.position = Vector2(0, 5)
-	goal.size = Vector2(Config.W, 10)
-	_root.add_child(goal)
+	_goal = _label("", 7, Color(1, 1, 1, 0.9))
+	_goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_goal.position = Vector2(0, 5)
+	_goal.size = Vector2(Config.W, 10)
+	_root.add_child(_goal)
 
 	_powerups = _label("", 7, Color.WHITE)
 	_powerups.position = Vector2(8, 16)
@@ -121,6 +129,17 @@ func _ready() -> void:
 	_over_title = labels[0]
 	_over_score = labels[1]
 	_over_title.add_theme_font_size_override("font_size", 18)
+	# fim de missão
+	_result_panel = _panel(["", "", ""], [["Próxima missão", next_mission_pressed], ["Repetir", retry_pressed], ["Campanha", menu_pressed]])
+	var rl := _result_panel.get_child(0).get_children()
+	_result_title = rl[0]
+	_result_stars = rl[1]
+	_result_detail = rl[2]
+	_result_title.add_theme_font_size_override("font_size", 16)
+	_result_stars.add_theme_font_size_override("font_size", 8)
+	_result_stars.add_theme_color_override("font_color", Color("#ffd23f"))
+	_result_detail.add_theme_font_size_override("font_size", 8)
+	_next_btn = rl[3]
 
 	show_playing(false)
 
@@ -130,6 +149,7 @@ func show_playing(on: bool) -> void:
 	_update_bot_label()
 	_pause_panel.visible = false
 	_over_panel.visible = false
+	_result_panel.visible = false
 	_flash.text = ""
 	_flash_t = 0.0
 
@@ -138,12 +158,29 @@ func show_paused(on: bool) -> void:
 	_pause_panel.visible = on
 
 
-func show_over(won: bool) -> void:
+func show_over(won: bool, coins: int) -> void:
 	_over_title.text = "Ganhaste!" if won else "Perdeste!"
 	_over_title.add_theme_color_override("font_color", Config.GOOD if won else Config.BAD)
-	_over_score.text = "Tu %d — %d Bot" % [world.sides[world.me].score, world.sides[1 - world.me].score]
+	_over_score.text = "Tu %d — %d Bot   ·   +%d moedas" % [world.sides[world.me].score, world.sides[1 - world.me].score, coins]
 	_over_panel.visible = true
 	_over_panel.get_child(0).get_child(2).grab_focus()
+
+
+## Ecrã de fim de missão. `stars`: [bool x3]; `labels`: texto de cada estrela.
+func show_mission_result(result: Dictionary, stars: Array, labels: Array, coins: int, has_next: bool) -> void:
+	_result_title.text = "Missão cumprida!" if result.won else "Missão falhada"
+	_result_title.add_theme_color_override("font_color", Config.GOOD if result.won else Config.BAD)
+	var lines: Array[String] = []
+	for i in 3:
+		lines.append(("★ " if stars[i] else "☆ ") + labels[i])
+	_result_stars.text = "\n".join(lines)
+	var detail := "Tempo %s  ·  %d abatidos  ·  +%d moedas" % [Campaign.format_time(result.time), result.kills, coins]
+	if not result.won:
+		detail = result.reason + "\n" + detail
+	_result_detail.text = detail
+	_next_btn.visible = result.won and has_next
+	_result_panel.visible = true
+	(_next_btn if _next_btn.visible else _result_panel.get_child(0).get_child(4)).grab_focus()
 
 
 func show_message(kind: String, side_id: int) -> void:
@@ -162,12 +199,13 @@ func _process(delta: float) -> void:
 	for i in 2:
 		var s := world.sides[i]
 		_score[i].text = str(s.score)
-		_names[i].text = ("TU" if i == world.me else "BOT")
+		_names[i].text = "TU" if i == world.me else ("BOT" if world.mission.is_empty() else "INIMIGO")
 		if s.ctrl is Airplane:
 			_hp[i].set_hp((s.ctrl as Airplane).hp, (s.ctrl as Airplane).type.max_hp)
 		else:
 			_hp[i].set_hp(0, 0)
 	_hint.text = world.player_hint()
+	_goal.text = world.mission_status_text()
 	_update_powerups()
 	if _flash_t > 0.0:
 		_flash_t -= delta

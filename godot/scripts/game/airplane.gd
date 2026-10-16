@@ -25,6 +25,7 @@ var shield := 0           ## tiros que ainda absorve
 var triple_t := 0.0       ## segundos de tiro triplo
 var turbo_t := 0.0        ## segundos de turbo
 var bombs := 0
+var bomb_cd := 0.0        ## tempo mínimo entre bombas
 ## Orientação do desenho: 1 = normal, -1 = espelhado (fica direito quando o avião
 ## descola para a esquerda). Muda só no chão; `roll` faz a transição aos poucos.
 var upright := 1.0
@@ -58,6 +59,7 @@ func step(dt: float) -> void:
 	triple_t = maxf(0.0, triple_t - dt)
 	turbo_t = maxf(0.0, turbo_t - dt)
 	cooldown -= dt
+	bomb_cd -= dt
 	if flying:
 		prop += dt * 45.0
 
@@ -135,7 +137,8 @@ func step(dt: float) -> void:
 		cooldown = type.fire_cooldown
 		world.fire_bullet(self)
 
-	if flying and inp.bomb and bombs > 0 and not on_ground:
+	if flying and inp.bomb and bombs > 0 and not on_ground and bomb_cd <= 0.0:
+		bomb_cd = 0.7
 		world.drop_bomb(self)
 
 	if inp != null and inp.eject:
@@ -184,8 +187,8 @@ func velocity() -> Vector2:
 
 
 func _draw() -> void:
-	var body: Color = Color.WHITE if hit_t > 0.0 else Config.TEAM_BODY[side.id]
-	var wing: Color = Color.WHITE if hit_t > 0.0 else Config.TEAM_WING[side.id]
+	var body: Color = Color.WHITE if hit_t > 0.0 else side.body_color()
+	var wing: Color = Color.WHITE if hit_t > 0.0 else side.wing_color()
 	# `roll` perto de 0 achata o desenho: parece o avião a rodar sobre si próprio
 	var flip := Vector2(1.0, roll) * type.draw_scale
 	var blade := absf(sin(prop)) * 4.0 + 0.6 if manned and not falling else 3.5
