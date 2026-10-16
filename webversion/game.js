@@ -1,7 +1,7 @@
 'use strict';
 
 // =====================================================================
-//  AeroDuel — protótipo 2D de combate de biplanos (1 jogador vs bot)
+//  AeroDuel — combate de biplanos 2D (contra o bot ou online 1v1)
 // =====================================================================
 
 // ---------- Constantes do mundo e da física ----------
@@ -21,10 +21,16 @@ const RESPAWN_TIME = 2.5;
 const HANGAR_X = [36, W - 36];
 const WALK_SPEED = 16;
 
+// ---------- Rede ----------
+const SNAP_HZ = 25;              // snapshots por segundo enviados pelo anfitrião
+const INTERP = 0.09;             // atraso de interpolação no convidado (s)
+const PILOT_STATES = ['free', 'chute', 'ground'];
+
 const COLORS = [
-  { body: '#2f6fd6', wing: '#9cc3ff', chute: '#e8f1ff' },
-  { body: '#d63a2f', wing: '#ffb19c', chute: '#fff0ea' },
+  { body: '#2f6fd6', wing: '#9cc3ff', chute: '#e8f1ff', name: 'azul' },
+  { body: '#d63a2f', wing: '#ffb19c', chute: '#fff0ea', name: 'vermelho' },
 ];
+const GOOD = '#9cff9c', BAD = '#ffb19c', WARN = '#fff6c2';
 
 const DIFFS = {
   facil:   { reaction: 0.35, noise: 0.30, cone: 0.10, range: 110, trigger: 0.35, huntPilots: false },
@@ -39,6 +45,8 @@ const dxWrap = (from, to) => { let d = to - from; if (d > W / 2) d -= W; if (d <
 const norm = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a <= -Math.PI) a += 2 * Math.PI; return a; };
 const angDiff = (from, to) => norm(to - from);
 const dist2 = (x1, y1, x2, y2) => { const dx = dxWrap(x1, x2), dy = y2 - y1; return dx * dx + dy * dy; };
+const r1 = v => Math.round(v * 10) / 10;
+const r2 = v => Math.round(v * 100) / 100;
 const $ = id => document.getElementById(id);
 
 // ---------- Som (WebAudio, sem ficheiros) ----------
@@ -93,24 +101,30 @@ const sfx = (() => {
 let planes = [], pilots = [], bullets = [], particles = [];
 let sides = [];
 let state = 'menu';             // menu | playing | paused | over
+let mode = 'demo';              // demo (bots no menu) | solo (contra o bot) | host | guest
+let me = 0;                     // lado controlado neste ecrã (0 azul, 1 vermelho)
 let difficulty = 'normal';
 let time = 0;
+let nextId = 1;
 const playerInput = { left: false, right: false, fire: false, eject: false };
+const remoteInput = { left: false, right: false, fire: false, eject: false };   // controlos do convidado, no anfitrião
 
 const clouds = Array.from({ length: 6 }, (_, i) => ({ x: i * 70 + rand(0, 40), y: rand(18, 90), s: rand(0.7, 1.4), v: rand(2, 5) }));
 const trees = [110, 128, 190, 255, 270];
 
-function newSide(id, isBot) {
-  return {
-    id, isBot, score: 0, ctrl: null, respawn: 0,
-    input: isBot ? { left: false, right: false, fire: false, eject: false } : playerInput,
-    bot: { t: 0, noise: 0, ejectT: 0 },
-  };
+const botInput = () => ({ left: false, right: false, fire: false, eject: false });
+
+function newSide(id, isBot, input) {
+  return { id, isBot, score: 0, ctrl: null, respawn: 0, input, bot: { t: 0, noise: 0, ejectT: 0 } };
 }
 
-function resetWorld(humanPlays) {
+function resetWorld(kind) {
   planes = []; pilots = []; bullets = []; particles = [];
-  sides = [newSide(0, !humanPlays), newSide(1, true)];
+  nextId = 1;
+  sides = [
+    newSide(0, kind === 'demo', kind === 'demo' ? botInput() : playerInput),
+    newSide(1, kind === 'demo' || kind === 'solo', kind === 'host' ? remoteInput : botInput()),
+  ];
   spawnPlane(sides[0]);
   spawnPlane(sides[1]);
 }
@@ -118,7 +132,7 @@ function resetWorld(humanPlays) {
 function spawnPlane(side) {
   const right = side.id === 0;
   const p = {
-    kind: 'plane', side,
+    kind: 'plane', id: nextId++, side,
     x: HANGAR_X[side.id] + (right ? 8 : -8), y: PLANE_Y,
     a: right ? 0 : Math.PI, speed: 0, fallVy: 0,
     hp: MAX_HP, onGround: true, stalled: false, falling: false, manned: true,
@@ -130,25 +144,70 @@ function spawnPlane(side) {
   return p;
 }
 
-// ---------- Pontuação e mensagens ----------
+// ---------- Efeitos (som, partículas, mensagens) ----------
+// Tudo o que se vê ou ouve num instante passa por fx(): corre aqui e, se
+// formos o anfitrião, segue para o convidado no próximo snapshot.
+let netEvents = [];
+function fx(name, ...args) {
+  runFx(name, args);
+  if (mode === 'host') netEvents.push([name, ...args]);
+}
+
+function runFx(name, a) {
+  const playing = state === 'playing';
+  switch (name) {
+    case 'boom': explosion(a[0], a[1]); sfx.boom(); if (a[2] === me && playing) vibrate(150); break;
+    case 'hit': puff(a[0], a[1], '#ffe680', 6, 50, 0.25, 1.2, 0); sfx.hit(); if (a[2] === me && playing) vibrate(40); break;
+    case 'blood': puff(a[0], a[1], '#b0182b', 10, 40, 0.5, 1.2, 60); sfx.hit(); break;
+    case 'tear': puff(a[0], a[1], COLORS[a[2]].chute, 8, 30, 0.6, 1.5, 20); showMsg('tear', a[2]); break;
+    case 'dust': puff(a[0], a[1], '#a58a5c', 3, 20, 0.3, 1, 40); break;
+    case 'shoot': sfx.shoot(a[0] === me && mode !== 'demo'); break;
+    case 'eject': sfx.eject(); break;
+    case 'chute': sfx.chute(); break;
+    case 'land': if (a[0] === me) sfx.land(); break;
+    case 'repair': if (a[0] === me) { sfx.repair(); showMsg('repair', a[0]); } break;
+    case 'newPlane': showMsg('newPlane', a[0]); break;
+    case 'msg': showMsg(a[0], a[1]); break;
+    case 'over': showOver(a[0]); break;
+  }
+}
+
+function foeName() { return mode === 'solo' || mode === 'demo' ? 'Bot' : 'Rival'; }
+
+function msgFor(kind, side) {
+  const mine = side === me, foe = foeName();
+  switch (kind) {
+    case 'planeCrew': return mine ? [`Caíste com o avião! ${foe} +2`, BAD] : ['Avião e piloto inimigos abatidos! +2', GOOD];
+    case 'plane': return mine ? [`Perdeste o avião! ${foe} +1`, BAD] : ['Avião inimigo destruído! +1', GOOD];
+    case 'pilot': return mine ? [`O teu piloto foi abatido! ${foe} +1`, BAD] : ['Piloto inimigo eliminado! +1', GOOD];
+    case 'tear': return mine ? ['Paraquedas rasgado!', WARN] : ['Rasgaste o paraquedas!', WARN];
+    case 'repair': return mine ? ['Avião reparado!', GOOD] : null;
+    case 'newPlane': return mine ? ['Novo avião!', COLORS[me].wing] : null;
+  }
+  return null;
+}
+
 let flashTimer = 0;
-function flash(text, color) {
+function showMsg(kind, side) {
   if (state !== 'playing') return;
+  const m = msgFor(kind, side);
+  if (!m) return;
   const el = $('flash');
-  el.textContent = text;
-  el.style.color = color || '#fff';
+  el.textContent = m[0];
+  el.style.color = m[1];
   el.classList.add('show');
   flashTimer = 1.6;
 }
 
-function award(loser, pts, text) {
+function award(loser, pts, kind) {
   const winner = sides[1 - loser.id];
   winner.score += pts;
-  if (state !== 'playing') {               // modo demonstração do menu
+  if (mode === 'demo') {                    // demonstração do menu: recomeça sozinha
     if (winner.score >= WIN_SCORE) sides.forEach(s => (s.score = 0));
     return;
   }
-  flash(text, winner.id === 0 ? '#9cff9c' : '#ffb19c');
+  if (state !== 'playing') return;
+  fx('msg', kind, loser.id);
   if (winner.score >= WIN_SCORE) endGame(winner);
 }
 
@@ -156,24 +215,20 @@ function award(loser, pts, text) {
 function crashPlane(p) {
   if (p.dead) return;
   p.dead = true;
-  explosion(p.x, Math.min(p.y, GROUND - 2));
-  sfx.boom();
-  if (p.side.id === 0 && state === 'playing') vibrate(150);
+  fx('boom', r1(p.x), r1(Math.min(p.y, GROUND - 2)), p.side.id);
   if (p.manned) {
     p.side.ctrl = null;
     p.side.respawn = RESPAWN_TIME;
-    award(p.side, 2, p.side.id === 1 ? 'Avião e piloto inimigos abatidos! +2' : 'Caíste com o avião! Bot +2');
+    award(p.side, 2, 'planeCrew');
   } else {
-    award(p.side, 1, p.side.id === 1 ? 'Avião inimigo destruído! +1' : 'Perdeste o avião! Bot +1');
+    award(p.side, 1, 'plane');
   }
 }
 
 function hitPlane(p) {
   p.hp--;
   p.hitT = 0.12;
-  puff(p.x, p.y, '#ffe680', 6, 50, 0.25, 1.2, 0);
-  sfx.hit();
-  if (p.side.id === 0 && state === 'playing') vibrate(40);
+  fx('hit', r1(p.x), r1(p.y), p.side.id);
   if (p.hp <= 0 && !p.falling) {
     p.falling = true;
     p.stalled = false;
@@ -187,7 +242,7 @@ function eject(p) {
   p.manned = false;
   if (!p.falling) { p.falling = true; p.spin = rand(-1, 1); }
   const pl = {
-    kind: 'pilot', side: p.side,
+    kind: 'pilot', id: nextId++, side: p.side,
     x: p.x, y: p.y - 4,
     vx: Math.cos(p.a) * p.speed * 0.4,
     vy: Math.sin(p.a) * p.speed * 0.4 - 45,
@@ -195,17 +250,22 @@ function eject(p) {
   };
   pilots.push(pl);
   p.side.ctrl = pl;
-  sfx.eject();
+  fx('eject');
 }
 
 function killPilot(pl) {
   if (pl.dead) return;
   pl.dead = true;
-  puff(pl.x, pl.y, '#b0182b', 10, 40, 0.5, 1.2, 60);
-  sfx.hit();
+  fx('blood', r1(pl.x), r1(pl.y));
   pl.side.ctrl = null;
   pl.side.respawn = RESPAWN_TIME;
-  award(pl.side, 1, pl.side.id === 1 ? 'Piloto inimigo eliminado! +1' : 'O teu piloto foi abatido! Bot +1');
+  award(pl.side, 1, 'pilot');
+}
+
+function tearChute(pl) {
+  pl.state = 'free';
+  pl.torn = true;
+  fx('tear', r1(pl.x), r1(pl.y - 10), pl.side.id);
 }
 
 function vibrate(ms) { if (navigator.vibrate) try { navigator.vibrate(ms); } catch (e) { /* ignorar */ } }
@@ -221,6 +281,18 @@ function explosion(x, y) {
   puff(x, y, '#ffd23f', 16, 70, 0.5, 2, 30);
   puff(x, y, '#ff7b25', 16, 50, 0.7, 2.6, 15);
   puff(x, y, '#555', 12, 25, 1.4, 3.2, -12);
+}
+
+// fumo de um avião danificado (só visual, cada ecrã gera o seu)
+function emitSmoke(p, dt) {
+  p.smokeT -= dt;
+  if (p.smokeT > 0 || (p.hp >= MAX_HP && !p.falling)) return;
+  p.smokeT = p.falling ? 0.03 : p.hp === 1 ? 0.07 : 0.16;
+  const dark = p.falling || p.hp === 1;
+  particles.push({ x: p.x - Math.cos(p.a) * 6, y: p.y - Math.sin(p.a) * 6, vx: rand(-4, 4), vy: rand(-8, -2),
+    life: 1.1, max: 1.1, color: dark ? '#333' : '#999', size: rand(2, 3.5), grav: -4 });
+  if (p.falling && Math.random() < 0.5)
+    particles.push({ x: p.x, y: p.y, vx: rand(-6, 6), vy: rand(-6, 0), life: 0.3, max: 0.3, color: '#ff8a25', size: 2, grav: 0 });
 }
 
 // ---------- Atualização: avião ----------
@@ -259,7 +331,7 @@ function updatePlane(p, dt) {
     // reparação ao passar pelo próprio hangar
     if (p.manned && p.hp < MAX_HP && Math.abs(dxWrap(p.x, HANGAR_X[p.side.id])) < 16) {
       p.hp = MAX_HP;
-      if (p.side.id === 0) { sfx.repair(); flash('Avião reparado!', '#9cff9c'); }
+      fx('repair', p.side.id);
     }
   } else if (!p.falling) {
     if (!p.stalled && p.speed < STALL) p.stalled = true;
@@ -292,30 +364,21 @@ function updatePlane(p, dt) {
       p.onGround = true;
       p.y = PLANE_Y;
       p.a = Math.cos(p.a) >= 0 ? 0 : Math.PI;
-      if (p.side.id === 0) sfx.land();
+      fx('land', p.side.id);
     } else {
       crashPlane(p);
       return;
     }
   }
 
-  // fumo quando danificado
-  p.smokeT -= dt;
-  if (p.smokeT <= 0 && (p.hp < MAX_HP || p.falling)) {
-    p.smokeT = p.falling ? 0.03 : p.hp === 1 ? 0.07 : 0.16;
-    const dark = p.falling || p.hp === 1;
-    particles.push({ x: p.x - Math.cos(p.a) * 6, y: p.y - Math.sin(p.a) * 6, vx: rand(-4, 4), vy: rand(-8, -2),
-      life: 1.1, max: 1.1, color: dark ? '#333' : '#999', size: rand(2, 3.5), grav: -4 });
-    if (p.falling && Math.random() < 0.5)
-      particles.push({ x: p.x, y: p.y, vx: rand(-6, 6), vy: rand(-6, 0), life: 0.3, max: 0.3, color: '#ff8a25', size: 2, grav: 0 });
-  }
+  emitSmoke(p, dt);
 
   // disparar
   if (flying && inp.fire && p.cd <= 0) {
     p.cd = FIRE_CD;
     const c = Math.cos(p.a), s = Math.sin(p.a), v = BULLET_SPEED + p.speed * 0.5;
-    bullets.push({ x: wrapX(p.x + c * 8), y: p.y + s * 8, vx: c * v, vy: s * v, life: BULLET_LIFE, owner: p.side });
-    sfx.shoot(p.side.id === 0 && !p.side.isBot);
+    bullets.push({ id: nextId++, x: wrapX(p.x + c * 8), y: p.y + s * 8, vx: c * v, vy: s * v, life: BULLET_LIFE, owner: p.side });
+    fx('shoot', p.side.id);
   }
 
   // saltar de paraquedas
@@ -331,7 +394,7 @@ function updatePilot(pl, dt) {
   if (pl.state === 'free') {
     pl.vy += G * dt;
     pl.vx *= 1 - 0.5 * dt;
-    if (!pl.torn && pl.t > 0.6) { pl.state = 'chute'; sfx.chute(); }
+    if (!pl.torn && pl.t > 0.6) { pl.state = 'chute'; fx('chute'); }
   } else if (pl.state === 'chute') {
     pl.vx += (dir * 22 - pl.vx) * 2 * dt;
     pl.vy += (16 - pl.vy) * 3 * dt;
@@ -352,7 +415,7 @@ function updatePilot(pl, dt) {
     if (Math.abs(dxWrap(pl.x, HANGAR_X[pl.side.id])) < 5) {
       pl.dead = true;                       // entrou no hangar
       spawnPlane(pl.side);
-      if (pl.side.id === 0) flash('Novo avião!', '#9cc3ff');
+      fx('newPlane', pl.side.id);
     }
   }
 }
@@ -361,17 +424,17 @@ function updatePilot(pl, dt) {
 function botThink(side, dt) {
   const inp = side.input, b = side.bot, D = DIFFS[difficulty];
   inp.left = inp.right = inp.fire = inp.eject = false;
-  const me = side.ctrl;
-  if (!me) return;
+  const meCtrl = side.ctrl;
+  if (!meCtrl) return;
 
-  if (me.kind === 'pilot') {
-    if (me.state === 'free') return;
-    const d = dxWrap(me.x, HANGAR_X[side.id]);
+  if (meCtrl.kind === 'pilot') {
+    if (meCtrl.state === 'free') return;
+    const d = dxWrap(meCtrl.x, HANGAR_X[side.id]);
     if (Math.abs(d) > 1) { if (d < 0) inp.left = true; else inp.right = true; }
     return;
   }
 
-  const p = me;
+  const p = meCtrl;
   if (p.falling) {
     b.ejectT += dt;
     if (b.ejectT > D.reaction + 0.2) inp.eject = true;
@@ -431,10 +494,21 @@ function botThink(side, dt) {
   if (aim !== null && dist < D.range && Math.abs(angDiff(p.a, aim)) < D.cone && Math.random() < D.trigger) inp.fire = true;
 }
 
-// ---------- Ciclo principal de atualização ----------
+// ---------- Ciclo de simulação (sozinho ou anfitrião) ----------
+function updateAmbient(dt) {
+  for (const c of clouds) c.x = (c.x + c.v * dt) % (W + 60);
+  for (const q of particles) {
+    q.vy += q.grav * dt;
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    q.life -= dt;
+  }
+  particles = particles.filter(q => q.life > 0);
+  if (particles.length > 600) particles.splice(0, particles.length - 600);
+  if (flashTimer > 0) { flashTimer -= dt; if (flashTimer <= 0) $('flash').classList.remove('show'); }
+}
+
 function update(dt) {
   time += dt;
-  for (const c of clouds) c.x = (c.x + c.v * dt) % (W + 60);
 
   for (const s of sides) if (s.isBot) botThink(s, dt);
 
@@ -446,7 +520,7 @@ function update(dt) {
     b.x = wrapX(b.x + b.vx * dt);
     b.y += b.vy * dt;
     b.life -= dt;
-    if (b.y >= GROUND) { b.life = 0; puff(b.x, GROUND, '#a58a5c', 3, 20, 0.3, 1, 40); continue; }
+    if (b.y >= GROUND) { b.life = 0; fx('dust', r1(b.x), GROUND); continue; }
     if (b.y < -10) { b.life = 0; continue; }
     for (const p of planes) {
       if (p.dead || p.falling || p.side === b.owner) continue;
@@ -456,12 +530,7 @@ function update(dt) {
     for (const pl of pilots) {
       if (pl.dead || pl.side === b.owner) continue;
       if (dist2(b.x, b.y, pl.x, pl.y) < 12) { killPilot(pl); b.life = 0; break; }
-      if (pl.state === 'chute' && dist2(b.x, b.y, pl.x, pl.y - 10) < 40) {
-        pl.state = 'free'; pl.torn = true; b.life = 0;
-        puff(pl.x, pl.y - 10, COLORS[pl.side.id].chute, 8, 30, 0.6, 1.5, 20);
-        if (state === 'playing') flash(pl.side.id === 0 ? 'Paraquedas rasgado!' : 'Rasgaste o paraquedas!', '#fff6c2');
-        break;
-      }
+      if (pl.state === 'chute' && dist2(b.x, b.y, pl.x, pl.y - 10) < 40) { tearChute(pl); b.life = 0; break; }
     }
   }
 
@@ -471,19 +540,12 @@ function update(dt) {
     for (const pl of pilots) {
       if (pl.dead || pl.side === p.side) continue;
       if (dist2(p.x, p.y, pl.x, pl.y) < 36) killPilot(pl);
-      else if (pl.state === 'chute' && dist2(p.x, p.y, pl.x, pl.y - 10) < 49) { pl.state = 'free'; pl.torn = true; }
+      else if (pl.state === 'chute' && dist2(p.x, p.y, pl.x, pl.y - 10) < 49) tearChute(pl);
     }
   }
   const alive = planes.filter(p => !p.dead && !p.falling);
   if (alive.length === 2 && alive[0].side !== alive[1].side && dist2(alive[0].x, alive[0].y, alive[1].x, alive[1].y) < 64) {
     for (const p of alive) { p.hp = 0; hitPlane(p); }
-  }
-
-  // partículas
-  for (const q of particles) {
-    q.vy += q.grav * dt;
-    q.x += q.vx * dt; q.y += q.vy * dt;
-    q.life -= dt;
   }
 
   // novos aviões
@@ -498,11 +560,140 @@ function update(dt) {
   planes = planes.filter(p => !p.dead);
   pilots = pilots.filter(p => !p.dead);
   bullets = bullets.filter(b => b.life > 0);
-  particles = particles.filter(q => q.life > 0);
-  if (particles.length > 600) particles.splice(0, particles.length - 600);
 
-  if (flashTimer > 0) { flashTimer -= dt; if (flashTimer <= 0) $('flash').classList.remove('show'); }
+  updateAmbient(dt);
 }
+
+// ---------- Rede: anfitrião ----------
+let snapT = 0, hostLastEj = 0;
+
+function makeSnapshot() {
+  const flags = p => (p.onGround ? 1 : 0) | (p.stalled ? 2 : 0) | (p.falling ? 4 : 0) | (p.manned ? 8 : 0) | (p.hitT > 0 ? 16 : 0);
+  const snap = {
+    t: 's',
+    tm: Math.round(time * 1000) / 1000,
+    sc: sides.map(s => s.score),
+    rs: sides.map(s => r1(s.respawn)),
+    c: sides.map(s => (s.ctrl ? s.ctrl.id : 0)),
+    P: planes.map(p => [p.id, p.side.id, r1(p.x), r1(p.y), r2(p.a), p.hp, flags(p), r1(p.speed), r1(p.fallVy)]),
+    L: pilots.map(l => [l.id, l.side.id, r1(l.x), r1(l.y), PILOT_STATES.indexOf(l.state), l.torn ? 1 : 0, l.walk, l.face, r1(l.vx), r1(l.vy)]),
+    B: bullets.map(b => [b.id, b.owner.id, r1(b.x), r1(b.y)]),
+    ev: netEvents,
+  };
+  netEvents = [];
+  return snap;
+}
+
+function hostTick(dt) {
+  snapT -= dt;
+  if (snapT > 0) return;
+  snapT = 1 / SNAP_HZ;
+  Net.send(makeSnapshot());
+}
+
+function hostReceive(m) {
+  if (m.t !== 'in') return;
+  remoteInput.left = !!(m.k & 1);
+  remoteInput.right = !!(m.k & 2);
+  remoteInput.fire = !!(m.k & 4);
+  if (m.e !== hostLastEj) { hostLastEj = m.e; remoteInput.eject = true; }
+}
+
+// ---------- Rede: convidado ----------
+// O convidado não simula nada: guarda os snapshots e desenha um pouco
+// atrás do mais recente, interpolando entre os dois que o rodeiam.
+let guestBuf = [], renderT = 0, lastKey = -1, ejectCount = 0, inputT = 0;
+const guestCosmetic = new Map();   // fumo e hélice por avião
+
+function decodeSnapshot(s) {
+  return {
+    tm: s.tm, sc: s.sc, rs: s.rs, c: s.c,
+    P: new Map(s.P.map(a => [a[0], {
+      kind: 'plane', id: a[0], side: sides[a[1]], x: a[2], y: a[3], a: a[4], hp: a[5],
+      onGround: !!(a[6] & 1), stalled: !!(a[6] & 2), falling: !!(a[6] & 4), manned: !!(a[6] & 8), hitT: a[6] & 16 ? 1 : 0,
+      speed: a[7], fallVy: a[8], smokeT: 0, prop: 0,
+    }])),
+    L: new Map(s.L.map(a => [a[0], {
+      kind: 'pilot', id: a[0], side: sides[a[1]], x: a[2], y: a[3], state: PILOT_STATES[a[4]], torn: !!a[5],
+      walk: a[6], face: a[7], vx: a[8], vy: a[9],
+    }])),
+    B: new Map(s.B.map(a => [a[0], { id: a[0], owner: sides[a[1]], x: a[2], y: a[3] }])),
+  };
+}
+
+function guestReceive(m) {
+  if (m.t === 'start') { startGuest(); return; }
+  if (m.t !== 's' || mode !== 'guest') return;
+  const last = guestBuf[guestBuf.length - 1];
+  if (last && m.tm < last.tm) guestBuf = [];          // o anfitrião recomeçou
+  guestBuf.push(decodeSnapshot(m));
+  if (guestBuf.length > 40) guestBuf.shift();
+  sides.forEach((s, i) => (s.score = m.sc[i]));
+  for (const e of m.ev) runFx(e[0], e.slice(1));
+}
+
+function lerpSet(A, B, k, withAngle) {
+  const out = [];
+  for (const [id, b] of B) {
+    const a = A.get(id);
+    if (!a || a === b) { out.push(Object.assign({}, b)); continue; }
+    const o = Object.assign({}, b);
+    o.x = wrapX(a.x + dxWrap(a.x, b.x) * k);
+    o.y = a.y + (b.y - a.y) * k;
+    if (withAngle) o.a = norm(a.a + angDiff(a.a, b.a) * k);
+    out.push(o);
+  }
+  return out;
+}
+
+function guestFrame(dt) {
+  time += dt;
+  updateAmbient(dt);
+  if (!guestBuf.length) return;
+
+  const target = guestBuf[guestBuf.length - 1].tm - INTERP;
+  renderT += dt;
+  if (Math.abs(renderT - target) > 0.3) renderT = target;
+  else renderT += (target - renderT) * Math.min(1, dt * 2);
+  while (guestBuf.length >= 2 && guestBuf[1].tm <= renderT) guestBuf.shift();
+
+  const A = guestBuf[0], B = guestBuf[1] || A;
+  const k = B.tm > A.tm ? Math.max(0, Math.min(1, (renderT - A.tm) / (B.tm - A.tm))) : 1;
+  planes = lerpSet(A.P, B.P, k, true);
+  pilots = lerpSet(A.L, B.L, k, false);
+  bullets = lerpSet(A.B, B.B, k, false);
+
+  sides.forEach((s, i) => {
+    s.respawn = B.rs[i];
+    s.ctrl = planes.find(p => p.id === B.c[i]) || pilots.find(p => p.id === B.c[i]) || null;
+  });
+
+  for (const p of planes) {
+    let c = guestCosmetic.get(p.id);
+    if (!c) { c = { smokeT: 0, prop: 0 }; guestCosmetic.set(p.id, c); }
+    p.smokeT = c.smokeT;
+    emitSmoke(p, dt);
+    c.smokeT = p.smokeT;
+    if (p.manned && !p.falling) c.prop += dt * 45;
+    p.prop = c.prop;
+  }
+  if (guestCosmetic.size > 40) {
+    for (const id of guestCosmetic.keys()) if (!planes.some(p => p.id === id)) guestCosmetic.delete(id);
+  }
+}
+
+function guestSendInput(dt) {
+  if (playerInput.eject) { ejectCount++; playerInput.eject = false; }
+  const key = (playerInput.left ? 1 : 0) | (playerInput.right ? 2 : 0) | (playerInput.fire ? 4 : 0);
+  inputT -= dt;
+  if (key !== lastKey || inputT <= 0 || ejectCount !== guestSendInput.lastEj) {
+    Net.send({ t: 'in', k: key, e: ejectCount });
+    lastKey = key;
+    guestSendInput.lastEj = ejectCount;
+    inputT = 0.1;
+  }
+}
+guestSendInput.lastEj = 0;
 
 // ---------- Desenho ----------
 const canvas = $('game');
@@ -582,10 +773,10 @@ function drawHangar(id) {
   ctx.beginPath(); ctx.moveTo(x - 13, GROUND - 11); ctx.lineTo(x, GROUND - 18); ctx.lineTo(x + 13, GROUND - 11); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#3b2f22'; ctx.fillRect(x - 6, GROUND - 8, 12, 8);
   // bandeira
-  const fx = id === 0 ? x + 9 : x - 9;
-  ctx.fillStyle = '#444'; ctx.fillRect(fx, GROUND - 27, 0.8, 16);
+  const fx0 = id === 0 ? x + 9 : x - 9;
+  ctx.fillStyle = '#444'; ctx.fillRect(fx0, GROUND - 27, 0.8, 16);
   ctx.fillStyle = c.body;
-  ctx.fillRect(fx + 0.8, GROUND - 27 + Math.sin(time * 6 + id) * 0.6, 5, 3);
+  ctx.fillRect(fx0 + 0.8, GROUND - 27 + Math.sin(time * 6 + id) * 0.6, 5, 3);
 }
 
 function drawPlane(p) {
@@ -675,7 +866,7 @@ function render() {
 let lastHud = '';
 function updateHud() {
   if (state !== 'playing' && state !== 'paused') return;
-  const hp = s => (s.ctrl && s.ctrl.kind === 'plane' ? '■'.repeat(Math.max(0, s.ctrl.hp)) + '□'.repeat(MAX_HP - Math.max(0, s.ctrl.hp)) : '');
+  const hp = s => (s && s.ctrl && s.ctrl.kind === 'plane' ? '■'.repeat(Math.max(0, s.ctrl.hp)) + '□'.repeat(MAX_HP - Math.max(0, s.ctrl.hp)) : '');
   const hint = playerHint();
   const key = [sides[0].score, sides[1].score, hp(sides[0]), hp(sides[1]), hint].join('|');
   if (key === lastHud) return;
@@ -688,10 +879,11 @@ function updateHud() {
 }
 
 function playerHint() {
-  const s = sides[0], c = s.ctrl;
+  if (mode === 'guest' && !guestBuf.length) return 'A receber o jogo…';
+  const s = sides[me], c = s.ctrl;
   if (!c) return s.respawn > 0 ? `Novo avião em ${Math.ceil(s.respawn)}…` : '';
   if (c.kind === 'pilot') {
-    if (c.state === 'ground') return 'Corre até ao hangar azul!';
+    if (c.state === 'ground') return `Corre até ao hangar ${COLORS[me].name}!`;
     if (c.state === 'chute') return 'Guia o paraquedas com ↺ ↻';
     return c.torn ? 'O paraquedas rasgou-se!' : '';
   }
@@ -705,45 +897,162 @@ function playerHint() {
 // ---------- Estados ----------
 function show(id, on) { $(id).classList.toggle('hidden', !on); }
 
-function startGame() {
-  sfx.init();
-  resetWorld(true);
+function enterPlaying() {
   state = 'playing';
   time = 0;
   lastHud = '';
+  flashTimer = 0;
+  $('flash').classList.remove('show');
   $('goal').textContent = WIN_SCORE;
-  show('menu', false); show('over', false); show('pause', false);
+  const names = { solo: ['TU', 'BOT'], host: ['TU', 'RIVAL'], guest: ['RIVAL', 'TU'] }[mode];
+  $('name0').textContent = names[0];
+  $('name1').textContent = names[1];
+  ['menu', 'over', 'pause', 'lobby'].forEach(id => show(id, false));
   show('hud', true); show('topbtns', true);
+  show('btnPause', mode === 'solo');
   show('touch', isTouch);
-  if (isTouch) {
-    const el = document.documentElement;
-    if (!document.fullscreenElement && el.requestFullscreen) {
-      el.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {});
-    }
-  }
+  lastNetRx = performance.now();
+}
+
+function startGame(kind) {
+  sfx.init();
+  mode = kind;
+  me = 0;
+  resetWorld(kind);
+  remoteInput.left = remoteInput.right = remoteInput.fire = remoteInput.eject = false;
+  hostLastEj = 0;
+  netEvents = [];
+  snapT = 0;
+  enterPlaying();
+  if (kind === 'host') Net.send({ t: 'start', v: 1 });
+}
+
+function startGuest() {
+  sfx.init();
+  mode = 'guest';
+  me = 1;
+  planes = []; pilots = []; bullets = []; particles = [];
+  sides = [newSide(0, false, botInput()), newSide(1, false, playerInput)];
+  guestBuf = []; renderT = 0; guestCosmetic.clear();
+  lastKey = -1; ejectCount = 0; guestSendInput.lastEj = 0;
+  enterPlaying();
 }
 
 function endGame(winner) {
+  fx('over', winner.id);
+}
+
+function showOver(winnerId) {
   state = 'over';
-  const won = winner.id === 0;
+  const won = winnerId === me;
   $('overTitle').textContent = won ? '🏆 Ganhaste!' : '💥 Perdeste!';
-  $('overScore').textContent = `Tu ${sides[0].score} — ${sides[1].score} Bot`;
-  won ? sfx.win() : sfx.lose();
+  $('overScore').textContent = `Tu ${sides[me].score} — ${sides[1 - me].score} ${foeName()}`;
+  show('again', mode !== 'guest');
+  show('waitHost', mode === 'guest');
+  if (won) sfx.win(); else sfx.lose();
   setTimeout(() => { if (state === 'over') { show('over', true); show('touch', false); } }, 900);
 }
 
-function goMenu() {
+function goMenu(note) {
+  Net.send({ t: 'bye' });
+  Net.close();
+  mode = 'demo';
+  me = 0;
   state = 'menu';
-  resetWorld(false);
-  show('over', false); show('pause', false); show('hud', false); show('topbtns', false); show('touch', false);
+  resetWorld('demo');
+  ['over', 'pause', 'hud', 'topbtns', 'touch', 'lobby'].forEach(id => show(id, false));
   $('hint').textContent = '';
   $('flash').classList.remove('show');
+  $('menuNote').textContent = note || '';
   show('menu', true);
 }
 
 function setPaused(on) {
+  if (mode !== 'solo') return;            // online não há pausa
   if (on && state === 'playing') { state = 'paused'; show('pause', true); }
   else if (!on && state === 'paused') { state = 'playing'; show('pause', false); }
+}
+
+function goFullscreen() {
+  if (!isTouch) return;
+  const el = document.documentElement;
+  if (document.fullscreenElement || !el.requestFullscreen) return;
+  el.requestFullscreen()
+    .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}))
+    .catch(() => {});
+}
+
+// ---------- Sala online ----------
+const NET_TIMEOUT = 5000;        // ms sem notícias do adversário = ligação perdida
+let roomCode = '';
+let lastNetRx = 0;
+
+function lobbyStatus(text, isError) {
+  const el = $('lobbyStatus');
+  el.textContent = text;
+  el.classList.toggle('error', !!isError);
+}
+
+function netHandlers(extra) {
+  return Object.assign({
+    onOpen() {
+      if (Net.role === 'host') startGame('host');
+      else lobbyStatus('Ligado! À espera do anfitrião…');
+    },
+    onData(m) {
+      lastNetRx = performance.now();
+      if (m && m.t === 'bye') { goMenu('O adversário saiu do jogo.'); return; }
+      if (Net.role === 'host') hostReceive(m);
+      else guestReceive(m);
+    },
+    onClose(msg) {
+      if (state === 'menu' && !$('lobby').classList.contains('hidden')) lobbyStatus(msg, true);
+      else goMenu(msg);
+    },
+  }, extra);
+}
+
+function openLobby(kind, code) {
+  sfx.init();
+  $('menuNote').textContent = '';
+  show('menu', false);
+  show('lobby', true);
+  show('hostBox', kind === 'host');
+  show('joinBox', kind === 'join');
+  $('lobbyTitle').textContent = kind === 'host' ? 'Criar sala' : 'Entrar numa sala';
+  lobbyStatus('');
+  if (kind === 'host') {
+    roomCode = '';
+    $('roomCode').textContent = '····';
+    lobbyStatus('A criar a sala…');
+    Net.host(netHandlers({
+      onCode(c) { roomCode = c; $('roomCode').textContent = c; lobbyStatus('À espera do adversário…'); },
+    }));
+  } else {
+    $('joinCode').value = Net.normCode(code);
+    setTimeout(() => $('joinCode').focus(), 50);
+  }
+}
+
+function joinRoom() {
+  const code = Net.normCode($('joinCode').value);
+  $('joinCode').value = code;
+  if (code.length !== 4) { lobbyStatus('O código tem 4 caracteres.', true); return; }
+  goFullscreen();
+  lobbyStatus('A ligar…');
+  Net.join(code, netHandlers({}));
+}
+
+async function shareRoom() {
+  if (!roomCode) return;
+  const url = location.href.split('#')[0] + '#' + roomCode;
+  const text = `Joga comigo no AeroDuel! Código da sala: ${roomCode}`;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'AeroDuel', text, url }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); lobbyStatus('Link copiado! Envia-o ao teu adversário.'); }
+  catch (e) { lobbyStatus(url); }
 }
 
 // ---------- Entrada: teclado ----------
@@ -753,10 +1062,14 @@ const KEYMAP = {
   Space: 'fire', KeyJ: 'fire', KeyZ: 'fire',
 };
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') {
+    if (e.key === 'Enter') joinRoom();
+    return;
+  }
   if (KEYMAP[e.code]) { playerInput[KEYMAP[e.code]] = true; e.preventDefault(); }
   if ((e.code === 'KeyE' || e.code === 'KeyK' || e.code === 'KeyX') && !e.repeat) playerInput.eject = true;
   if (e.code === 'KeyP' || e.code === 'Escape') setPaused(state === 'playing');
-  if (e.code === 'Enter' && state === 'menu') startGame();
+  if (e.code === 'Enter' && state === 'menu' && !$('menu').classList.contains('hidden')) startGame('solo');
 });
 addEventListener('keyup', e => { if (KEYMAP[e.code]) playerInput[KEYMAP[e.code]] = false; });
 addEventListener('blur', () => { playerInput.left = playerInput.right = playerInput.fire = false; setPaused(true); });
@@ -767,7 +1080,7 @@ const isTouch = 'ontouchstart' in window || matchMedia('(pointer: coarse)').matc
 
 function bindHold(id, key) {
   const el = $(id);
-  const on = e => { e.preventDefault(); el.setPointerCapture && el.setPointerCapture(e.pointerId); playerInput[key] = true; el.classList.add('on'); sfx.init(); };
+  const on = e => { e.preventDefault(); if (el.setPointerCapture) el.setPointerCapture(e.pointerId); playerInput[key] = true; el.classList.add('on'); sfx.init(); };
   const off = e => { e.preventDefault(); playerInput[key] = false; el.classList.remove('on'); };
   el.addEventListener('pointerdown', on);
   el.addEventListener('pointerup', off);
@@ -792,10 +1105,15 @@ document.querySelectorAll('.diff button').forEach(btn => btn.addEventListener('c
   difficulty = btn.dataset.d;
   document.querySelectorAll('.diff button').forEach(b => b.classList.toggle('sel', b === btn));
 }));
-$('play').addEventListener('click', startGame);
-$('again').addEventListener('click', startGame);
-$('toMenu').addEventListener('click', goMenu);
-$('quit').addEventListener('click', goMenu);
+$('play').addEventListener('click', () => { goFullscreen(); startGame('solo'); });
+$('btnHost').addEventListener('click', () => { goFullscreen(); openLobby('host'); });
+$('btnJoin').addEventListener('click', () => openLobby('join'));
+$('btnJoinGo').addEventListener('click', joinRoom);
+$('btnShare').addEventListener('click', shareRoom);
+$('btnLobbyCancel').addEventListener('click', () => goMenu());
+$('again').addEventListener('click', () => startGame(mode === 'host' ? 'host' : 'solo'));
+$('toMenu').addEventListener('click', () => goMenu());
+$('quit').addEventListener('click', () => goMenu());
 $('resume').addEventListener('click', () => setPaused(false));
 $('btnPause').addEventListener('click', () => setPaused(true));
 $('btnSound').addEventListener('click', e => { sfx.init(); e.currentTarget.textContent = sfx.toggle() ? '🔇' : '🔊'; });
@@ -805,15 +1123,31 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000);
   last = now;
-  if (state === 'playing' || state === 'menu' || state === 'over') update(dt);
+  if (mode === 'guest') {
+    guestFrame(dt);
+    if (state === 'playing' || state === 'over') guestSendInput(dt);
+  } else if (state !== 'paused') {
+    update(dt);
+    if (mode === 'host') hostTick(dt);
+  }
+  if ((mode === 'host' || mode === 'guest') && now - lastNetRx > NET_TIMEOUT) goMenu('Perdeu-se a ligação ao adversário.');
   updateHud();
   render();
   requestAnimationFrame(frame);
 }
 
+addEventListener('pagehide', () => Net.send({ t: 'bye' }));
+
 resize();
 goMenu();
 requestAnimationFrame(frame);
 
+// link com código de sala (ex.: .../index.html#K7QF) abre logo o ecrã para entrar
+if (/^#[A-Za-z0-9]{4}$/.test(location.hash)) openLobby('join', location.hash.slice(1));
+
 // Ganchos para testes automáticos
-window.__game = { get state() { return state; }, get sides() { return sides; }, get planes() { return planes; }, get pilots() { return pilots; }, update, startGame, setDifficulty: d => (difficulty = d) };
+window.__game = {
+  get state() { return state; }, get mode() { return mode; }, get sides() { return sides; },
+  get planes() { return planes; }, get pilots() { return pilots; },
+  update, startGame, setDifficulty: d => (difficulty = d),
+};

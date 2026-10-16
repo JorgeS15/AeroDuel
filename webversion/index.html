@@ -14,9 +14,9 @@
   <div id="stage">
     <canvas id="game"></canvas>
     <div id="hud" class="hidden">
-      <div class="side s0"><span class="name">TU</span> <span id="score0">0</span> <span id="hp0" class="hp"></span></div>
+      <div class="side s0"><span id="name0" class="name">TU</span> <span id="score0">0</span> <span id="hp0" class="hp"></span></div>
       <div class="goal">Primeiro a <span id="goal">10</span></div>
-      <div class="side s1"><span id="hp1" class="hp"></span> <span id="score1">0</span> <span class="name">BOT</span></div>
+      <div class="side s1"><span id="hp1" class="hp"></span> <span id="score1">0</span> <span id="name1" class="name">BOT</span></div>
     </div>
     <div id="flash"></div>
     <div id="hint"></div>
@@ -44,12 +44,17 @@
   <div class="panel">
     <h1>AeroDuel</h1>
     <p class="sub">Abate o avião inimigo. Se fores atingido, salta de paraquedas e corre para o teu hangar para ires buscar outro avião!</p>
-    <div class="diff">
+    <div class="diff" role="group" aria-label="Dificuldade do bot">
       <button data-d="facil">Fácil</button>
       <button data-d="normal" class="sel">Normal</button>
       <button data-d="dificil">Difícil</button>
     </div>
-    <button id="play" class="big">▶ Jogar</button>
+    <button id="play" class="big">▶ Jogar contra o bot</button>
+    <div class="online">
+      <button id="btnHost">🌐 Criar sala online</button>
+      <button id="btnJoin">🔑 Entrar numa sala</button>
+    </div>
+    <p id="menuNote" class="note" role="status"></p>
     <details class="help">
       <summary>Como se joga</summary>
       <ul>
@@ -65,7 +70,28 @@
         <li>Avião abatido: +1 ponto. Piloto eliminado: +1 ponto. Se ficares dentro do avião quando ele cai, o adversário ganha os dois pontos, por isso salta!</li>
         <li>No ar, guias o paraquedas com ↺ ↻. No chão, o piloto anda com os mesmos botões.</li>
       </ul>
+      <ul>
+        <li><b>Online:</b> um jogador cria a sala e envia o código de 4 letras (ou o link) ao outro, que escolhe "Entrar numa sala". Quem cria a sala joga de azul, quem entra joga de vermelho.</li>
+      </ul>
     </details>
+  </div>
+</div>
+
+<div id="lobby" class="overlay hidden">
+  <div class="panel">
+    <h2 id="lobbyTitle">Jogo online</h2>
+    <div id="hostBox">
+      <p class="sub">Envia este código ao teu adversário:</p>
+      <div id="roomCode" class="code">····</div>
+      <button id="btnShare">Partilhar link</button>
+    </div>
+    <div id="joinBox">
+      <label class="sub" for="joinCode">Escreve o código da sala:</label>
+      <input id="joinCode" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7QF">
+      <button id="btnJoinGo" class="big">Entrar</button>
+    </div>
+    <p id="lobbyStatus" class="status" role="status"></p>
+    <button id="btnLobbyCancel">Cancelar</button>
   </div>
 </div>
 
@@ -82,10 +108,13 @@
     <h2 id="overTitle">Ganhaste!</h2>
     <p id="overScore" class="sub"></p>
     <button id="again" class="big">↻ Jogar outra vez</button>
+    <p id="waitHost" class="sub hidden">À espera que o anfitrião recomece…</p>
     <button id="toMenu">Menu principal</button>
   </div>
 </div>
 
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="net.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
