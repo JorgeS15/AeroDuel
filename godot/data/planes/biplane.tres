@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="PlaneType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/plane_type.gd" id="1_type"]
+
+[resource]
+script = ExtResource("1_type")
+display_name = "Biplano"
+description = "Equilibrado. Aguenta três tiros e dispara cinco vezes por segundo."

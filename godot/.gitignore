@@ -1,0 +1,8 @@
+# Cache do editor Godot
+.godot/
+# Modelo de build Android (gradle), se vier a ser instalado
+/android/
+# Builds
+*.apk
+*.aab
+build.json

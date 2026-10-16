@@ -1,0 +1,46 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="AeroDuel"
+config/description="Combate de biplanos 2D: abate o adversário e salta de paraquedas quando és atingido."
+config/version="0.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/quit_on_go_back=false
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Game="*res://scripts/autoload/game.gd"
+Sfx="*res://scripts/autoload/sfx.gd"
+Updater="*res://scripts/autoload/updater.gd"
+
+[display]
+
+window/size/viewport_width=384
+window/size/viewport_height=216
+window/size/window_width_override=1152
+window/size/window_height_override=648
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=4
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.043, 0.063, 0.125, 1)
