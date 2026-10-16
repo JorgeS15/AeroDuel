@@ -31,7 +31,7 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
 - **Progresso** (guardado no telemóvel): moedas por abates, missões e estrelas novas. No **hangar** compras aviões, 3 melhorias por avião (motor, blindagem, metralhadora) e pinturas. Na campanha só podes usar os aviões que compraste; no duelo livre estão todos disponíveis.
 - **Bot:** 3 dificuldades e o "ás" das missões. Também vai buscar caixas e bombardeia alvos no chão.
 - **Ecrã inteiro:** a largura do mundo acompanha o formato do telemóvel, sem barras pretas.
-- **Controlos táteis** numa barra por baixo do jogo, para os dedos não taparem o avião, com multitoque, vibração e sons.
+- **Controlos táteis** baixos, nos cantos, com zona de toque maior do que o desenho, e quase transparentes quando há um avião por trás. Multitoque, vibração e sons.
 - **Builds de debug:** botão "Bot: ataca/alvo", versão do build no menu e aviso de atualização.
 
 Para criar um avião novo, junta um `.tres` a `data/planes/` e o id a `World.PLANE_IDS`. Os números dos powerups estão em `scripts/data/powerups.gd`. As missões estão em `scripts/data/campaign.gd`, e os preços e melhorias em `scripts/autoload/progress.gd`.
@@ -81,4 +81,4 @@ godot --headless --path godot res://tests/sim_test.tscn
 - **Passo fixo:** a simulação corre a 60 passos por segundo (`_physics_process`), por isso o comportamento é igual em qualquer telemóvel.
 - **Desenho:** por agora é feito em código (`_draw`). Mais tarde troca-se por sprites sem mexer na física.
 - **Efeitos:** som, partículas e mensagens passam todos por `World.fx()`. É esse o ponto que o multiplayer vai usar para reenviar eventos ao outro telemóvel.
-- **Ecrã:** o mundo tem sempre 216 de altura. Nos ecrãs táteis soma-se por baixo a barra de controlos (`Config.BAR_H`, `Game.set_controls_bar()`). A largura (`Config.W`, no mínimo 384) segue o formato do ecrã (`keep_height`).
+- **Ecrã:** a altura lógica é sempre 216. A largura (`Config.W`, no mínimo 384) segue o formato do ecrã (`keep_height`).

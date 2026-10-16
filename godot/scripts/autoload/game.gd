@@ -8,30 +8,23 @@ var difficulty := "normal"
 var plane_choice := "biplane"    ## id do avião escolhido no menu (World.PLANE_IDS)
 var sound_on := true
 var ui_theme: Theme
-## Nos ecrãs táteis os botões ficam numa barra por baixo do jogo, para os dedos
-## não taparem o avião. O ecrã lógico passa a ter 216 + BAR_H de altura.
-var controls_bar := false
 ## Versão, n.º do build, canal (latest / pr-N) e commit deste APK.
 var build := { "version": "", "build": 0, "channel": "", "commit": "local" }
 
 
 func _ready() -> void:
-	set_controls_bar(DisplayServer.is_touchscreen_available())
+	update_world_width()
 	_setup_input()
 	_load_build_info()
 	ui_theme = _make_theme()
 	_load_settings()
 
 
-## Liga ou desliga a barra de controlos e recalcula a largura do mundo.
-## O mundo tem sempre 216 de altura; a largura segue o formato do ecrã (mín. 384).
-func set_controls_bar(on: bool) -> void:
-	controls_bar = on
-	var total_h := Config.H + (Config.BAR_H if on else 0.0)
-	get_tree().root.content_scale_size = Vector2i(int(Config.BASE_W), int(total_h))
+## A altura lógica é sempre 216; a largura segue o formato do ecrã (mín. 384).
+func update_world_width() -> void:
 	var win := Vector2(DisplayServer.window_get_size())
 	var aspect := win.x / maxf(win.y, 1.0)
-	Config.W = maxf(Config.BASE_W, roundf(aspect * total_h))
+	Config.W = maxf(Config.BASE_W, roundf(aspect * Config.H))
 
 
 ## Texto curto para mostrar no ecrã, ex.: "v0.1.0 · build 7 · pr-2 · 81cb40b".

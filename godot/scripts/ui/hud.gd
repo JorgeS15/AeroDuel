@@ -110,32 +110,19 @@ func _ready() -> void:
 	_touch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_touch.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(_touch)
-	if Game.controls_bar:
-		# barra própria por baixo do jogo: os dedos não tapam o avião
-		var bar := ColorRect.new()
-		bar.color = Color("#141b33")
-		bar.position = Vector2(0, Config.H)
-		bar.size = Vector2(Config.W, Config.BAR_H)
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_touch.add_child(bar)
-		var line := ColorRect.new()
-		line.color = Color(1, 1, 1, 0.15)
-		line.position = Vector2(0, Config.H)
-		line.size = Vector2(Config.W, 1)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_touch.add_child(line)
-		var y := Config.H + Config.BAR_H * 0.5
-		btn_left = _touch_button("↺", Vector2(26, y), 19, Color.WHITE)
-		btn_right = _touch_button("↻", Vector2(70, y), 19, Color.WHITE)
-		btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, y), 19, Color("#ff6b6b"))
-		btn_eject = _touch_button("SALTAR", Vector2(Config.W - 70, y), 16, Color("#ffd23f"))
-		btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 110, y), 16, Color("#9a8cff"))
-	else:
-		btn_left = _touch_button("↺", Vector2(24, 188), 17, Color.WHITE)
-		btn_right = _touch_button("↻", Vector2(64, 188), 17, Color.WHITE)
-		btn_eject = _touch_button("SALTAR", Vector2(Config.W - 66, 192), 13, Color("#ffd23f"))
-		btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, 184), 20, Color("#ff6b6b"))
-		btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 34, 146), 13, Color("#9a8cff"))
+	# baixos e encostados aos cantos, por cima da faixa do chão; a zona de toque
+	# é maior do que o círculo desenhado, e ficam transparentes quando há um
+	# avião ou piloto por trás (ver _fade_touch_buttons)
+	btn_left = _touch_button("↺", Vector2(24, 198), 16, Color.WHITE)
+	btn_right = _touch_button("↻", Vector2(72, 198), 16, Color.WHITE)
+	btn_fire = _touch_button("FOGO", Vector2(Config.W - 24, 194), 17, Color("#ff6b6b"))
+	btn_eject = _touch_button("SALTAR", Vector2(Config.W - 70, 204), 11, Color("#ffd23f"))
+	btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 62, 168), 11, Color("#9a8cff"))
+	for b in [btn_left, btn_right]:
+		b.hit_scale = 1.45
+	btn_fire.hit_scale = 1.4
+	for b in [btn_eject, btn_bomb]:
+		b.hit_scale = 1.5
 	btn_bomb.visible = false
 	btn_eject.tapped.connect(func() -> void: eject_pressed.emit())
 	btn_bomb.tapped.connect(func() -> void: bomb_pressed.emit())
@@ -226,11 +213,32 @@ func _process(delta: float) -> void:
 		else:
 			_hp[i].set_hp(0, 0)
 	_hint.text = world.player_hint()
+	_fade_touch_buttons(delta)
 	_goal.text = world.mission_status_text()
 	_update_powerups()
 	if _flash_t > 0.0:
 		_flash_t -= delta
 		_flash.modulate.a = clampf(_flash_t / 0.3, 0.0, 1.0)
+
+
+## Botões quase transparentes quando um avião ou piloto passa por trás deles.
+func _fade_touch_buttons(delta: float) -> void:
+	if not _touch.visible:
+		return
+	for b: TouchButton in [btn_left, btn_right, btn_fire, btn_eject, btn_bomb]:
+		var rect := b.get_global_rect().grow(8.0)
+		var behind := false
+		for p in world.planes:
+			if rect.has_point(p.position):
+				behind = true
+				break
+		if not behind:
+			for pl in world.pilots:
+				if rect.has_point(pl.position):
+					behind = true
+					break
+		var target := 0.15 if behind else 1.0
+		b.modulate.a = move_toward(b.modulate.a, target, delta * 6.0)
 
 
 func _update_powerups() -> void:
