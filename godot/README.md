@@ -9,10 +9,12 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. Por agora (fase 1) tem o m
 
 ## Instalar no telemóvel
 
-Cada push que mexa em `godot/` gera um APK automaticamente:
+Cada build gera um APK que se descarrega diretamente, sem `.zip`:
 
-1. No GitHub, abre **Actions → Android APK**, escolhe a execução mais recente e descarrega o artefacto **AeroDuel-debug-apk** (vem num `.zip`).
-2. Passa o `AeroDuel-debug.apk` para o Android e abre-o. Da primeira vez, o Android pede para autorizar a instalação de "fontes desconhecidas".
+- **Versão mais recente (`main`):** https://github.com/JorgeS15/AeroDuel/releases/download/latest/AeroDuel.apk
+- **Versão de teste de um PR:** `…/releases/download/pr-<número>/AeroDuel.apk`, também listada em **Releases**.
+
+Abre o link no telemóvel, com sessão iniciada no GitHub enquanto o repositório for privado, e abre o `AeroDuel.apk`. Da primeira vez, o Android pede para autorizar a instalação de apps desta origem. O APK fica também em **Actions → Android APK** como artefacto `.zip`.
 
 ## Abrir no computador
 

@@ -11,6 +11,13 @@ on:
 env:
   GODOT_VERSION: "4.5.1"
 
+permissions:
+  contents: write   # para publicar o APK como release
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -93,3 +100,31 @@ jobs:
           name: AeroDuel-debug-apk
           path: build/AeroDuel-debug.apk
           if-no-files-found: error
+
+      # O APK fica também num release, para se descarregar diretamente (sem .zip):
+      #   main     -> release "latest"   (link fixo para a versão mais recente)
+      #   PR n.º N -> release "pr-N"     (versão de teste desse PR)
+      - name: Publicar APK para download direto
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cp build/AeroDuel-debug.apk build/AeroDuel.apk
+          if [ -n "$PR_NUMBER" ]; then
+            TAG="pr-$PR_NUMBER"
+            TITLE="AeroDuel — teste do PR #$PR_NUMBER"
+          elif [ "$GITHUB_REF_NAME" = "main" ]; then
+            TAG="latest"
+            TITLE="AeroDuel — versão mais recente"
+          else
+            echo "Sem release para $GITHUB_REF_NAME"; exit 0
+          fi
+          NOTES="APK de debug gerado a partir de ${SHA::7} em $(date -u '+%Y-%m-%d %H:%M') UTC.
+
+          Instalação: descarrega AeroDuel.apk no telemóvel e abre-o (autoriza a instalação de apps desta origem)."
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" build/AeroDuel.apk --target "$SHA" --prerelease --title "$TITLE" --notes "$NOTES"
+          echo "### 📱 Download direto: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/AeroDuel.apk" >> "$GITHUB_STEP_SUMMARY"
