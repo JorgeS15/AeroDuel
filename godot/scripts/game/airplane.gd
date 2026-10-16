@@ -20,13 +20,12 @@ var spin := 0.0
 var smoke_t := 0.0
 var hit_t := 0.0
 var prop := 0.0
-## Orientação visual: 1 = barriga para baixo a voar para a direita, -1 = espelhado
-## (direito a voar para a esquerda). `roll` vai de um ao outro aos poucos (meio-tonneau).
+## Orientação do desenho: 1 = normal, -1 = espelhado (fica direito quando o avião
+## descola para a esquerda). Muda só no chão; `roll` faz a transição aos poucos.
 var upright := 1.0
 var roll := 1.0
 
 const ROLL_SPEED := 9.0          ## unidades de `roll` por segundo (~0,2 s por meio-tonneau)
-const ROLL_THRESHOLD := 0.25     ## quão para lá da vertical tem de estar para rolar
 
 
 func setup(p_world: World, p_side: Side) -> void:
@@ -136,21 +135,12 @@ func step(dt: float) -> void:
 	queue_redraw()
 
 
-## Decide para que lado o avião fica "direito". Enquanto o jogador está a rodar,
-## mantém a orientação (num looping fica de costas no topo, como deve ser); quando
-## larga, e se o avião estiver claramente a voar ao contrário, faz um meio-tonneau.
-func _update_roll(inp: InputState, dt: float) -> void:
-	var c := cos(angle)
+## Orientação do desenho. No ar o avião fica como o jogador o deixa: se fizer meio
+## looping, continua a voar de costas até rodar outra vez. Só no chão (descolagem e
+## aterragem) é que fica sempre direito; a mudança é animada como um tonneau curto.
+func _update_roll(_inp: InputState, dt: float) -> void:
 	if on_ground:
-		upright = 1.0 if c >= 0.0 else -1.0
-		roll = upright
-		return
-	var turning := inp != null and (inp.left or inp.right)
-	if not falling and not turning:
-		if c < -ROLL_THRESHOLD:
-			upright = -1.0
-		elif c > ROLL_THRESHOLD:
-			upright = 1.0
+		upright = 1.0 if cos(angle) >= 0.0 else -1.0
 	roll = move_toward(roll, upright, ROLL_SPEED * dt)
 
 
