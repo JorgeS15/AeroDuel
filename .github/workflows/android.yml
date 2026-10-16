@@ -3,9 +3,9 @@ name: Android APK
 on:
   push:
     branches: [main]
-    paths: ["godot/**", ".github/workflows/android.yml"]
+    paths: ["godot/**", "ci/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["godot/**", ".github/workflows/android.yml"]
+    paths: ["godot/**", "ci/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 env:
@@ -60,8 +60,10 @@ jobs:
       - name: Configurar exportação Android (SDK e chave de debug)
         run: |
           set -euo pipefail
-          keytool -genkeypair -keystore ~/debug.keystore -storepass android -alias androiddebugkey \
-            -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          # Chave de debug FIXA (ci/debug.keystore): o Android só instala uma atualização por cima
+          # se o APK novo estiver assinado com a mesma chave. Só serve para builds de teste;
+          # a versão da Play Store vai usar uma chave própria guardada em segredo.
+          cp ci/debug.keystore ~/debug.keystore
           mkdir -p ~/.config/godot
           MINOR="${GODOT_VERSION%.*}"
           for f in editor_settings-4.tres "editor_settings-${MINOR}.tres"; do
@@ -114,6 +116,9 @@ jobs:
           ~/godot/godot --headless --path godot --export-debug "Android" "$GITHUB_WORKSPACE/build/AeroDuel-debug.apk"
           ls -la build
           test -s build/AeroDuel-debug.apk
+          # confirmar a assinatura (tem de ser sempre o mesmo certificado)
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
+          "$APKSIGNER" verify --print-certs build/AeroDuel-debug.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
 
       - uses: actions/upload-artifact@v4
         with:
