@@ -20,6 +20,13 @@ var spin := 0.0
 var smoke_t := 0.0
 var hit_t := 0.0
 var prop := 0.0
+## Orientação visual: 1 = barriga para baixo a voar para a direita, -1 = espelhado
+## (direito a voar para a esquerda). `roll` vai de um ao outro aos poucos (meio-tonneau).
+var upright := 1.0
+var roll := 1.0
+
+const ROLL_SPEED := 9.0          ## unidades de `roll` por segundo (~0,2 s por meio-tonneau)
+const ROLL_THRESHOLD := 0.25     ## quão para lá da vertical tem de estar para rolar
 
 
 func setup(p_world: World, p_side: Side) -> void:
@@ -30,6 +37,8 @@ func setup(p_world: World, p_side: Side) -> void:
 	var right := side.id == 0
 	position = Vector2(Config.HANGAR_X[side.id] + (8.0 if right else -8.0), Config.PLANE_Y)
 	angle = 0.0 if right else PI
+	upright = 1.0 if right else -1.0
+	roll = upright
 
 
 ## Os controlos que este avião obedece, ou null se ninguém o pilota.
@@ -123,7 +132,26 @@ func step(dt: float) -> void:
 	if inp != null and inp.eject:
 		world.eject(self)
 
+	_update_roll(inp, dt)
 	queue_redraw()
+
+
+## Decide para que lado o avião fica "direito". Enquanto o jogador está a rodar,
+## mantém a orientação (num looping fica de costas no topo, como deve ser); quando
+## larga, e se o avião estiver claramente a voar ao contrário, faz um meio-tonneau.
+func _update_roll(inp: InputState, dt: float) -> void:
+	var c := cos(angle)
+	if on_ground:
+		upright = 1.0 if c >= 0.0 else -1.0
+		roll = upright
+		return
+	var turning := inp != null and (inp.left or inp.right)
+	if not falling and not turning:
+		if c < -ROLL_THRESHOLD:
+			upright = -1.0
+		elif c > ROLL_THRESHOLD:
+			upright = 1.0
+	roll = move_toward(roll, upright, ROLL_SPEED * dt)
 
 
 func velocity() -> Vector2:
@@ -135,8 +163,8 @@ func velocity() -> Vector2:
 func _draw() -> void:
 	var body: Color = Color.WHITE if hit_t > 0.0 else Config.TEAM_BODY[side.id]
 	var wing: Color = Color.WHITE if hit_t > 0.0 else Config.TEAM_WING[side.id]
-	# nunca de pernas para o ar quando vai para a esquerda
-	var flip := Vector2(1.0, -1.0 if cos(angle) < 0.0 else 1.0)
+	# `roll` perto de 0 achata o desenho: parece o avião a rodar sobre si próprio
+	var flip := Vector2(1.0, roll)
 	var blade := absf(sin(prop)) * 4.0 + 0.6 if manned and not falling else 3.5
 	for off in Config.wrap_offsets(position.x, 10.0):
 		draw_set_transform(Vector2(off, 0.0), angle, flip)
