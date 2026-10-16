@@ -110,11 +110,32 @@ func _ready() -> void:
 	_touch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_touch.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(_touch)
-	btn_left = _touch_button("↺", Vector2(24, 188), 17, Color.WHITE)
-	btn_right = _touch_button("↻", Vector2(64, 188), 17, Color.WHITE)
-	btn_eject = _touch_button("SALTAR", Vector2(Config.W - 66, 192), 13, Color("#ffd23f"))
-	btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, 184), 20, Color("#ff6b6b"))
-	btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 34, 146), 13, Color("#9a8cff"))
+	if Game.controls_bar:
+		# barra própria por baixo do jogo: os dedos não tapam o avião
+		var bar := ColorRect.new()
+		bar.color = Color("#141b33")
+		bar.position = Vector2(0, Config.H)
+		bar.size = Vector2(Config.W, Config.BAR_H)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_touch.add_child(bar)
+		var line := ColorRect.new()
+		line.color = Color(1, 1, 1, 0.15)
+		line.position = Vector2(0, Config.H)
+		line.size = Vector2(Config.W, 1)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_touch.add_child(line)
+		var y := Config.H + Config.BAR_H * 0.5
+		btn_left = _touch_button("↺", Vector2(26, y), 19, Color.WHITE)
+		btn_right = _touch_button("↻", Vector2(70, y), 19, Color.WHITE)
+		btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, y), 19, Color("#ff6b6b"))
+		btn_eject = _touch_button("SALTAR", Vector2(Config.W - 70, y), 16, Color("#ffd23f"))
+		btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 110, y), 16, Color("#9a8cff"))
+	else:
+		btn_left = _touch_button("↺", Vector2(24, 188), 17, Color.WHITE)
+		btn_right = _touch_button("↻", Vector2(64, 188), 17, Color.WHITE)
+		btn_eject = _touch_button("SALTAR", Vector2(Config.W - 66, 192), 13, Color("#ffd23f"))
+		btn_fire = _touch_button("FOGO", Vector2(Config.W - 26, 184), 20, Color("#ff6b6b"))
+		btn_bomb = _touch_button("BOMBA", Vector2(Config.W - 34, 146), 13, Color("#9a8cff"))
 	btn_bomb.visible = false
 	btn_eject.tapped.connect(func() -> void: eject_pressed.emit())
 	btn_bomb.tapped.connect(func() -> void: bomb_pressed.emit())

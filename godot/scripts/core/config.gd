@@ -7,14 +7,15 @@ extends RefCounted
 ## o formato do ecrã (Game acerta-a no arranque), por isso não há barras pretas.
 static var W := 384.0
 const BASE_W := 384.0
-const H := 216.0
+const H := 216.0                 ## altura do mundo (a barra de controlos fica por baixo)
+const BAR_H := 44.0              ## altura da barra de controlos nos ecrãs táteis
 const GROUND := 196.0            ## y do chão
 const PLANE_Y := GROUND - 4.0    ## y do centro de um avião pousado
 const GRAVITY := 55.0
 const BULLET_LIFE := 1.1
 const WIN_SCORE := 10
 const RESPAWN_TIME := 2.5
-const WALK_SPEED := 16.0
+const WALK_SPEED := 32.0
 
 const TEAM_BODY := [Color("#2f6fd6"), Color("#d63a2f")]
 const TEAM_WING := [Color("#9cc3ff"), Color("#ffb19c")]
