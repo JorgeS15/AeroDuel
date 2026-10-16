@@ -15,6 +15,20 @@ var _eject_t := 0.0
 
 
 ## `passive` (modo de teste): voa a direito a meia altura e não dispara, como um alvo.
+## A caixa ainda no ar mais próxima (as que já estão no chão são perigosas de apanhar).
+func _nearest_crate(p: Airplane, world: World) -> Crate:
+	var best: Crate = null
+	var best_d := INF
+	for c in world.crates:
+		if c.dead or c.landed or c.position.y > Config.GROUND - 45.0:
+			continue
+		var d := Config.dist2(p.position, c.position)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
 func think(side: Side, world: World, difficulty: String, dt: float, passive := false) -> void:
 	var inp := side.input
 	var d: Dictionary = DIFFICULTIES[difficulty]
@@ -27,7 +41,7 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 		var pilot := me as Pilot
 		if pilot.state == Pilot.State.FREE:
 			return
-		var dx := Config.dx_wrap(pilot.position.x, Config.HANGAR_X[side.id])
+		var dx := Config.dx_wrap(pilot.position.x, Config.hangar_x(side.id))
 		if absf(dx) > 1.0:
 			inp.left = dx < 0.0
 			inp.right = dx > 0.0
@@ -43,7 +57,7 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 
 	var facing := 1.0 if cos(p.angle) >= 0.0 else -1.0
 	var up := -0.55 if facing > 0.0 else PI + 0.55
-	var desired: float
+	var desired := NAN
 	var aim := NAN
 	var dist := INF
 	_t -= dt
@@ -69,6 +83,23 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 			valid = true
 			tpos = target.position
 			tvel = (target as Pilot).velocity()
+		# bombardear o que estiver por baixo (avião pousado ou piloto)
+		if valid and p.bombs > 0 and not passive:
+			var below := tpos.y - p.position.y
+			var target_low: bool = (target is Pilot) or (target is Airplane and (target as Airplane).on_ground)
+			var bomb_dx := Config.dx_wrap(p.position.x + p.velocity().x * 0.6, tpos.x)
+			if target_low and below > 25.0 and absf(bomb_dx) < 12.0:
+				inp.bomb = true
+		# ir buscar uma caixa quando está perto e não há alvo mais perto
+		var crate := _nearest_crate(p, world)
+		if crate != null:
+			var crate_rel := Vector2(Config.dx_wrap(p.position.x, crate.position.x), crate.position.y - p.position.y)
+			var enemy_dist := INF
+			if valid:
+				enemy_dist = Vector2(Config.dx_wrap(p.position.x, tpos.x), tpos.y - p.position.y).length()
+			if crate_rel.length() < 130.0 and crate_rel.length() < enemy_dist * 0.7:
+				valid = false
+				desired = crate_rel.angle()
 		if valid:
 			var rel := Vector2(Config.dx_wrap(p.position.x, tpos.x), tpos.y - p.position.y)
 			dist = rel.length()
@@ -79,7 +110,7 @@ func think(side: Side, world: World, difficulty: String, dt: float, passive := f
 				_t = d.reaction
 				_noise = randf_range(-d.noise, d.noise)
 			desired = aim + _noise
-		else:
+		elif is_nan(desired):
 			var cruise_y := 100.0 if passive else 70.0
 			desired = atan2((cruise_y - p.position.y) * 0.5, 60.0 * facing)   # patrulhar a meia altura
 

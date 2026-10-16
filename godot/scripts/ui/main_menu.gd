@@ -14,12 +14,16 @@ O avião acelera sozinho. Para descolar, espera que ganhe velocidade e puxa o na
 Se subires a direito muito tempo perdes velocidade e [b]entras em perda[/b]: aponta o nariz para baixo para recuperar.
 Para aterrar, toca no chão quase na horizontal. Se passares pelo teu hangar, o avião fica reparado.
 Avião abatido +1, piloto eliminado +1. Se caíres dentro do avião, o adversário ganha os dois pontos: salta!
-No ar guias o paraquedas com ↺ ↻. No chão, o piloto anda com os mesmos botões até ao hangar."""
+No ar guias o paraquedas com ↺ ↻. No chão, o piloto anda com os mesmos botões até ao hangar.
+[b]Powerups:[/b] caem caixas de paraquedas; voa contra elas para as apanhar. [b]E[/b] escudo (3 tiros), [b]3[/b] tiro triplo, [b]T[/b] turbo, [b]+[/b] reparação, [b]B[/b] bombas (botão BOMBA ou tecla B)."""
 
 var _main_panel: PanelContainer
 var _help_panel: PanelContainer
 var _play_btn: Button
 var _update_label: Label
+var _plane_name: Label
+var _plane_desc: Label
+var _plane_preview: PlanePreview
 var _update_btn: Button
 
 
@@ -80,6 +84,38 @@ func _ready() -> void:
 	for b in diff_row.get_children():
 		b.add_theme_stylebox_override("pressed", pressed_style)
 		b.add_theme_stylebox_override("hover_pressed", pressed_style)
+
+	# escolha do avião
+	var plane_row := HBoxContainer.new()
+	plane_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	plane_row.add_theme_constant_override("separation", 6)
+	var prev := Button.new()
+	prev.text = "◀"
+	prev.custom_minimum_size = Vector2(20, 18)
+	prev.pressed.connect(func() -> void: _cycle_plane(-1))
+	plane_row.add_child(prev)
+	_plane_preview = PlanePreview.new()
+	plane_row.add_child(_plane_preview)
+	var names := VBoxContainer.new()
+	names.custom_minimum_size = Vector2(150, 0)
+	names.add_theme_constant_override("separation", 0)
+	_plane_name = Label.new()
+	_plane_name.add_theme_font_size_override("font_size", 10)
+	names.add_child(_plane_name)
+	_plane_desc = Label.new()
+	_plane_desc.add_theme_font_size_override("font_size", 6)
+	_plane_desc.modulate = Color(1, 1, 1, 0.8)
+	_plane_desc.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_plane_desc.custom_minimum_size = Vector2(150, 0)
+	names.add_child(_plane_desc)
+	plane_row.add_child(names)
+	var next := Button.new()
+	next.text = "▶"
+	next.custom_minimum_size = Vector2(20, 18)
+	next.pressed.connect(func() -> void: _cycle_plane(1))
+	plane_row.add_child(next)
+	box.add_child(plane_row)
+	_refresh_plane()
 
 	_play_btn = Button.new()
 	_play_btn.text = "Jogar contra o bot"
@@ -166,6 +202,21 @@ func open() -> void:
 	Updater.check()
 	_show_help(false)
 	_play_btn.grab_focus()
+
+
+func _cycle_plane(step: int) -> void:
+	var ids: Array = World.PLANE_IDS
+	var i := maxi(0, ids.find(Game.plane_choice))
+	Game.plane_choice = ids[(i + step + ids.size()) % ids.size()]
+	Game.save_settings()
+	_refresh_plane()
+
+
+func _refresh_plane() -> void:
+	var t := World.plane_type(Game.plane_choice)
+	_plane_name.text = t.display_name
+	_plane_desc.text = t.description
+	_plane_preview.show_type(t)
 
 
 func _refresh_update() -> void:

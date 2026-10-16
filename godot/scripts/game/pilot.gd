@@ -53,7 +53,7 @@ func step(dt: float) -> void:
 	else:
 		walk = dir
 		position.x = Config.wrap_x(position.x + dir * Config.WALK_SPEED * dt)
-		if absf(Config.dx_wrap(position.x, Config.HANGAR_X[side.id])) < 5.0:
+		if absf(Config.dx_wrap(position.x, Config.hangar_x(side.id))) < 5.0:
 			world.pilot_reached_hangar(self)
 			return
 

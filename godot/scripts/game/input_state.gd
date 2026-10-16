@@ -6,6 +6,7 @@ var left := false
 var right := false
 var fire := false
 var eject := false   ## dura um só passo da simulação
+var bomb := false    ## dura um só passo da simulação
 
 
 func clear() -> void:
@@ -13,3 +14,4 @@ func clear() -> void:
 	right = false
 	fire = false
 	eject = false
+	bomb = false

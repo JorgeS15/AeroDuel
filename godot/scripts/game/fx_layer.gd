@@ -53,3 +53,8 @@ func _draw() -> void:
 	for b in world.bullets:
 		var c := Color("#fff38a") if b.shooter.id == 0 else Color("#ffcf8a")
 		draw_rect(Rect2(b.pos.x - 1.0, b.pos.y - 0.6, 2.0, 1.2), c)
+	for bomb in world.bombs:
+		draw_set_transform(bomb.pos, bomb.vel.angle())
+		draw_rect(Rect2(-2.2, -1.1, 4.0, 2.2), Color("#2a2a2a"))
+		draw_rect(Rect2(-3.2, -1.4, 1.2, 2.8), Color("#555555"))
+		draw_set_transform(Vector2.ZERO)

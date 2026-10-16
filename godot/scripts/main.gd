@@ -28,12 +28,13 @@ func _ready() -> void:
 	hud.again_pressed.connect(start_game)
 	hud.menu_pressed.connect(go_menu)
 	hud.eject_pressed.connect(func() -> void: world.player_input.eject = true)
+	hud.bomb_pressed.connect(func() -> void: world.player_input.bomb = true)
 	go_menu()
 
 
 func start_game() -> void:
 	get_tree().paused = false
-	world.start("solo", Game.difficulty)
+	world.start("solo", Game.difficulty, Game.plane_choice)
 	menu.close()
 	hud.show_playing(true)
 	state = State.PLAYING
@@ -84,6 +85,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("eject") and state == State.PLAYING:
 		world.player_input.eject = true
+	elif event.is_action_pressed("bomb") and state == State.PLAYING:
+		world.player_input.bomb = true
 	elif event.is_action_pressed("pause"):
 		set_paused(state == State.PLAYING)
 

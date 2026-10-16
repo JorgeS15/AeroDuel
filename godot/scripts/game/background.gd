@@ -2,7 +2,7 @@ class_name Background
 extends Node2D
 ## Céu, nuvens, colinas, árvores, hangares e chão.
 
-const TREES := [110.0, 128.0, 190.0, 255.0, 270.0]
+const TREES := [0.286, 0.333, 0.495, 0.664, 0.703]   ## posições em fração da largura
 
 var world: World
 var _clouds: Array[Dictionary] = []
@@ -10,7 +10,14 @@ var _hills := PackedVector2Array()
 
 
 func _ready() -> void:
-	for i in 6:
+	rebuild()
+
+
+## Recalcula nuvens e colinas para a largura atual do mundo.
+func rebuild() -> void:
+	_clouds.clear()
+	_hills = PackedVector2Array()
+	for i in int(ceil(Config.W / 64.0)):
 		_clouds.append({ "x": i * 70.0 + randf_range(0, 40), "y": randf_range(18, 90), "s": randf_range(0.7, 1.4), "v": randf_range(2, 5) })
 	_hills.append(Vector2(0, Config.GROUND))
 	var x := 0.0
@@ -47,7 +54,8 @@ func _draw() -> void:
 
 	draw_colored_polygon(_hills, Color("#8cc98a"))
 
-	for tx in TREES:
+	for tf in TREES:
+		var tx: float = tf * w
 		draw_rect(Rect2(tx - 0.7, g - 6, 1.4, 6), Color("#6b4a2b"))
 		draw_circle(Vector2(tx, g - 8), 4, Color("#3e8a3a"))
 
@@ -63,7 +71,7 @@ func _draw() -> void:
 
 
 func _draw_hangar(id: int) -> void:
-	var x: float = Config.HANGAR_X[id]
+	var x: float = Config.hangar_x(id)
 	var g := Config.GROUND
 	var t := world.time if world else 0.0
 	draw_rect(Rect2(x - 11, g - 11, 22, 11), Color("#d8c69c"))

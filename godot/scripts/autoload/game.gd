@@ -5,6 +5,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 const BUILD_INFO_PATH := "res://build.json"   ## escrito pelo CI; não existe em builds locais
 
 var difficulty := "normal"
+var plane_choice := "biplane"    ## id do avião escolhido no menu (World.PLANE_IDS)
 var sound_on := true
 var ui_theme: Theme
 ## Versão, n.º do build, canal (latest / pr-N) e commit deste APK.
@@ -12,10 +13,17 @@ var build := { "version": "", "build": 0, "channel": "", "commit": "local" }
 
 
 func _ready() -> void:
+	update_world_width()
 	_setup_input()
 	_load_build_info()
 	ui_theme = _make_theme()
 	_load_settings()
+
+
+## A altura lógica é sempre 216; a largura segue o formato do ecrã (mín. 384).
+func update_world_width() -> void:
+	var size := get_viewport().get_visible_rect().size
+	Config.W = maxf(Config.BASE_W, roundf(size.x))
 
 
 ## Texto curto para mostrar no ecrã, ex.: "v0.1.0 · build 7 · pr-2 · 81cb40b".
@@ -45,6 +53,7 @@ func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "difficulty", difficulty)
 	cfg.set_value("game", "sound_on", sound_on)
+	cfg.set_value("game", "plane", plane_choice)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -54,6 +63,7 @@ func _load_settings() -> void:
 		return
 	difficulty = cfg.get_value("game", "difficulty", difficulty)
 	sound_on = cfg.get_value("game", "sound_on", sound_on)
+	plane_choice = cfg.get_value("game", "plane", plane_choice)
 
 
 func _setup_input() -> void:
@@ -62,6 +72,7 @@ func _setup_input() -> void:
 		"turn_right": [KEY_RIGHT, KEY_D],
 		"fire": [KEY_SPACE, KEY_J, KEY_Z],
 		"eject": [KEY_E, KEY_K, KEY_X],
+		"bomb": [KEY_B, KEY_L],
 		"pause": [KEY_P, KEY_ESCAPE],
 	}
 	for action in keys:

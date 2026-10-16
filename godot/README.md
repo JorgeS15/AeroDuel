@@ -1,11 +1,34 @@
 # AeroDuel: app Android (Godot 4)
 
-Versão a sério do AeroDuel, feita em **Godot 4.5**. Por agora (fase 1) tem o mesmo que o protótipo web:
-- voo com perda de velocidade, descolagem e aterragem;
-- tiro, e reparação ao passar pelo hangar;
-- paraquedas que se pode rasgar a tiro, e piloto que corre até ao hangar;
-- bot com 3 dificuldades;
-- controlos táteis com multitoque, vibração e sons.
+Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
+
+- **Voo:** perda de velocidade, descolagem e aterragem, e reparação ao passar pelo hangar. Se virares o avião de costas, ele continua de costas.
+- **Paraquedas:** pode rasgar-se a tiro; no chão, o piloto corre até ao hangar.
+- **4 aviões**, escolhidos no menu com ◀ ▶:
+
+| Avião | Características |
+|---|---|
+| Biplano | Equilibrado, aguenta 3 tiros |
+| Caça | Rápido e com rotação apertada, mas só aguenta 2 tiros |
+| Bombardeiro | Lento e pesado: aguenta 5 tiros e tem metralhadora traseira |
+| Triplano | Sobe como ninguém e quase não entra em perda, mas é lento |
+
+- **Powerups:** caem caixas de paraquedas e apanham-se a voar contra elas.
+
+| Letra | Powerup | Efeito |
+|---|---|---|
+| E | Escudo | Absorve 3 tiros |
+| 3 | Tiro triplo | Leque de balas durante 8 s |
+| T | Turbo | Mais motor e mais rotação durante 8 s |
+| + | Reparação | Vida cheia |
+| B | Bombas | 2 bombas: botão BOMBA ou tecla B. Rebentam no chão ou ao tocar num avião e apanham aviões e pilotos à volta |
+
+- **Bot:** 3 dificuldades. Também vai buscar caixas e bombardeia alvos no chão.
+- **Ecrã inteiro:** a largura do mundo acompanha o formato do telemóvel, sem barras pretas.
+- **Controlos táteis** com multitoque, vibração e sons.
+- **Builds de debug:** botão "Bot: ataca/alvo", versão do build no menu e aviso de atualização.
+
+Para criar um avião novo, junta um `.tres` a `data/planes/` e o id a `World.PLANE_IDS`. Os números dos powerups estão em `scripts/data/powerups.gd`.
 
 ## Instalar no telemóvel
 
@@ -37,7 +60,7 @@ godot/
 │   ├── ui/                hud, main_menu, touch_button
 │   └── autoload/          Game (definições, teclas, tema) e Sfx (sons gerados por código)
 └── tests/
-    ├── sim_test.tscn      10 min de bot contra bot por dificuldade, com limites mínimos (corre no CI)
+    ├── sim_test.tscn      cada avião contra cada avião + 10 min por dificuldade, com limites mínimos (corre no CI)
     └── screenshots.tscn   capturas de ecrã do menu e do jogo
 ```
 
@@ -52,4 +75,4 @@ godot --headless --path godot res://tests/sim_test.tscn
 - **Passo fixo:** a simulação corre a 60 passos por segundo (`_physics_process`), por isso o comportamento é igual em qualquer telemóvel.
 - **Desenho:** por agora é feito em código (`_draw`). Mais tarde troca-se por sprites sem mexer na física.
 - **Efeitos:** som, partículas e mensagens passam todos por `World.fx()`. É esse o ponto que o multiplayer vai usar para reenviar eventos ao outro telemóvel.
-- **Ecrã:** o mundo lógico tem 384×216 e é escalado para o ecrã (`canvas_items`). Em telemóveis mais compridos que 16:9 ficam barras laterais. Ajusta-se numa fase seguinte.
+- **Ecrã:** a altura lógica é sempre 216. A largura (`Config.W`, no mínimo 384) segue o formato do ecrã (`keep_height`).
