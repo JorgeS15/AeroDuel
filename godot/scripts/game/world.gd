@@ -7,6 +7,8 @@ signal message(kind: String, side_id: int)
 signal game_over(winner_id: int)
 ## Fim de uma missão da campanha. `result`: won, reason, time, kills, planes_lost, hangar_hp.
 signal mission_finished(result: Dictionary)
+## Multijogador, no anfitrião: cada efeito, para reenviar ao outro telemóvel.
+signal fx_event(event: String, args: Array)
 
 ## Aviões disponíveis, pela ordem em que aparecem no menu (ficheiros em data/planes/).
 ## São carregados só quando são precisos: com preload, o .tres podia ser lido antes de o
@@ -14,7 +16,10 @@ signal mission_finished(result: Dictionary)
 const PLANE_IDS := ["biplane", "fighter", "bomber", "triplane"]
 static var _plane_cache := {}
 
-var mode := "demo"           ## demo (bots no menu) | solo (duelo livre) | mission (campanha)
+## demo (bots no menu) | solo (duelo livre) | mission (campanha)
+## | versus (multijogador, neste telemóvel corre a simulação)
+## | remote (multijogador, este telemóvel só mostra o que o anfitrião envia)
+var mode := "demo"
 var me := 0                  ## lado controlado neste ecrã
 var difficulty := "normal"
 var time := 0.0
@@ -29,6 +34,8 @@ var crate_t := 0.0            ## segundos até cair a próxima caixa
 var player_input := InputState.new()
 var bot_passive := false      ## modo de teste: o bot voa a direito e não dispara
 var powerups_enabled := true
+var net_sync: NetSync = null  ## modo remote: fotografias recebidas do anfitrião
+var _next_nid := 0
 
 # missão em curso (vazio fora da campanha)
 var mission := {}
@@ -68,12 +75,15 @@ static func random_plane_id() -> String:
 
 ## Começa um jogo novo. `opts` (tudo opcional):
 ##   difficulty: String, player_type / bot_type: PlaneType (null = ao calhas),
-##   player_colors: [fuselagem, asas], mission: Dictionary (ver Campaign)
+##   player_colors / bot_colors: [fuselagem, asas], mission: Dictionary (ver Campaign),
+##   remote_input: InputState (versus: controlos que chegam do outro telemóvel)
 func start(p_mode: String, opts := {}) -> void:
 	mode = p_mode
 	mission = opts.get("mission", {})
 	difficulty = opts.get("difficulty", "normal")
-	me = 0
+	me = 1 if mode == "remote" else 0
+	_next_nid = 0
+	net_sync = NetSync.new() if mode == "remote" else null
 	time = 0.0
 	finished = false
 	for child in entities.get_children():
@@ -110,9 +120,23 @@ func start(p_mode: String, opts := {}) -> void:
 		Side.new(0, demo, InputState.new() if demo else player_input, p0),
 		Side.new(1, true, InputState.new(), p1),
 	]
+	if is_multiplayer():
+		# os dois lados são pessoas: no anfitrião o lado 1 obedece ao que chega pela
+		# rede; no outro telemóvel ninguém simula, só se mostra (ver NetSync)
+		for s in sides:
+			s.is_bot = false
+			s.brain = null
+		if mode == "versus":
+			sides[1].input = opts.get("remote_input", InputState.new())
+			sides[1].input.clear()
+		else:
+			sides[0].input = InputState.new()
+			sides[1].input = player_input
 	sides[0].colors = opts.get("player_colors", [])
-	sides[1].colors = bot_def.get("colors", [])
+	sides[1].colors = opts.get("bot_colors", bot_def.get("colors", []))
 	sides[1].raid = bot_def.get("raid", false)
+	if mode == "remote":
+		return   # os aviões chegam na primeira fotografia
 	for s in sides:
 		spawn_plane(s)
 	if mission.get("goal", "") == "balloons":
@@ -123,7 +147,20 @@ func _physics_process(dt: float) -> void:
 	step(dt)
 
 
+func is_multiplayer() -> bool:
+	return mode == "versus" or mode == "remote"
+
+
+func new_nid() -> int:
+	_next_nid += 1
+	return _next_nid
+
+
 func step(dt: float) -> void:
+	if mode == "remote":
+		net_sync.step(self, dt)
+		fx_layer.step(dt)
+		return
 	time += dt
 
 	for s in sides:
@@ -260,6 +297,7 @@ func _step_crates(dt: float) -> void:
 		crate_t = randf_range(Powerups.SPAWN_MIN, Powerups.SPAWN_MAX)
 		if crates.size() < Powerups.MAX_CRATES:
 			var c := Crate.new()
+			c.nid = new_nid()
 			# longe dos hangares, para não cair logo em cima de quem está a descolar
 			c.setup(Powerups.KINDS.pick_random(), Config.W * randf_range(0.2, 0.8))
 			entities.add_child(c)
@@ -332,6 +370,7 @@ func _explode(b: Bomb) -> void:
 
 func spawn_plane(side: Side) -> Airplane:
 	var p := Airplane.new()
+	p.nid = new_nid()
 	p.setup(self, side)
 	entities.add_child(p)
 	planes.append(p)
@@ -399,6 +438,7 @@ func eject(p: Airplane) -> void:
 		p.falling = true
 		p.spin = randf_range(-1.0, 1.0)
 	var pilot := Pilot.new()
+	pilot.nid = new_nid()
 	var v := Vector2(cos(p.angle), sin(p.angle)) * p.speed * 0.4 + Vector2(0.0, -45.0)
 	pilot.setup(self, p.side, p.position + Vector2(0.0, -4.0), v)
 	entities.add_child(pilot)
@@ -444,7 +484,7 @@ func _award(loser: Side, points: int, kind: String) -> void:
 		else:
 			kills += 1
 	fx("msg", [kind, loser.id])
-	if mode == "solo" and winner.score >= Config.WIN_SCORE:
+	if (mode == "solo" or mode == "versus") and winner.score >= Config.WIN_SCORE:
 		finished = true
 		_sfx("win" if winner.id == me else "lose")
 		game_over.emit(winner.id)
@@ -531,6 +571,8 @@ func mission_status_text() -> String:
 ## Tudo o que se vê ou ouve num instante passa por aqui. No multiplayer,
 ## o anfitrião vai reencaminhar estes eventos para o outro telemóvel.
 func fx(event: String, args: Array) -> void:
+	if mode == "versus":
+		fx_event.emit(event, args)
 	var live := mode != "demo" and not finished
 	match event:
 		"boom":
@@ -638,9 +680,16 @@ func player_hint() -> String:
 	return ""
 
 
+## Nome do adversário: Bot no duelo livre, Inimigo na campanha, Amigo no multijogador.
+func foe_name() -> String:
+	if is_multiplayer():
+		return "Amigo"
+	return "Bot" if mission.is_empty() else "Inimigo"
+
+
 func message_text(kind: String, side_id: int) -> Array:
 	var mine := side_id == me
-	var foe := "Bot" if mission.is_empty() else "Inimigo"
+	var foe := foe_name()
 	if kind == "balloon":
 		return ["Balão destruído! %d/%d" % [balloons_destroyed, int(mission.get("target", 0))], Config.GOOD]
 	if kind == "hangar_hit":

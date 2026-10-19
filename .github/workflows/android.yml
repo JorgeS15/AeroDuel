@@ -105,6 +105,15 @@ jobs:
       - name: Teste de simulação (bot contra bot)
         run: ~/godot/godot --headless --path godot res://tests/sim_test.tscn
 
+      - name: Teste do multijogador (anfitrião e convidado em dois processos)
+        run: |
+          set -euo pipefail
+          timeout 120 ~/godot/godot --headless --path godot res://tests/net_test.tscn -- host &
+          HOST=$!
+          sleep 2
+          timeout 120 ~/godot/godot --headless --path godot res://tests/net_test.tscn -- join
+          wait $HOST
+
       - name: Exportar APK de debug
         env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/debug.keystore

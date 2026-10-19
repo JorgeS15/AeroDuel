@@ -1,7 +1,7 @@
 class_name MainMenu
 extends CanvasLayer
 ## Menu principal (por cima de uma demonstração com dois bots), em páginas:
-## início, duelo livre, campanha, hangar e ajuda.
+## início, duelo livre, campanha, jogar com amigos (Wi-Fi), hangar e ajuda.
 
 signal duel_pressed
 signal mission_pressed(index: int)
@@ -13,7 +13,8 @@ const HELP_TEXT := """[b]Rodar:[/b] ↺ ↻  (teclado: ← → ou A D)   [b]Disp
 O avião acelera sozinho. Para descolar, espera que ganhe velocidade e puxa o nariz para cima. Se subires a direito muito tempo [b]entras em perda[/b]: aponta o nariz para baixo para recuperar. Para aterrar, toca no chão quase na horizontal; se passares pelo teu hangar, o avião fica reparado.
 Avião abatido +1, piloto eliminado +1. Se caíres dentro do avião, o adversário ganha os dois pontos: salta! No ar guias o paraquedas com ↺ ↻; no chão, o piloto corre até ao hangar.
 [b]Powerups:[/b] voa contra as caixas. [b]E[/b] escudo, [b]3[/b] tiro triplo, [b]T[/b] turbo, [b]+[/b] reparação, [b]B[/b] bombas.
-[b]Campanha:[/b] cada missão dá até 3 estrelas e moedas. No [b]hangar[/b] compras aviões, melhorias e pinturas."""
+[b]Campanha:[/b] cada missão dá até 3 estrelas e moedas. No [b]hangar[/b] compras aviões, melhorias e pinturas.
+[b]Com amigos:[/b] os dois telemóveis na mesma rede Wi-Fi (ou um faz hotspot). Um carrega em [b]Criar jogo[/b]; o outro escolhe o jogo na lista ou escreve o IP que aparece no primeiro."""
 
 var _root: Control
 var _pages := {}
@@ -26,6 +27,11 @@ var _hangar_body: VBoxContainer
 var _update_label: Label
 var _update_btn: Button
 var _play_btn: Button
+var _wifi_planes: PlaneCarousel
+var _wifi_status: Label
+var _wifi_hosts: VBoxContainer
+var _host_btn: Button
+var _ip_edit: LineEdit
 
 
 func _ready() -> void:
@@ -45,9 +51,12 @@ func _ready() -> void:
 	_build_duel()
 	_build_campaign()
 	_build_hangar()
+	_build_wifi()
 	_build_help()
 	_build_footer()
 	Progress.changed.connect(_refresh_all)
+	Net.hosts_changed.connect(_refresh_wifi)
+	Net.status_changed.connect(_refresh_wifi)
 	_show("home")
 
 
@@ -61,6 +70,14 @@ func open() -> void:
 func open_campaign() -> void:
 	visible = true
 	_show("campaign")
+
+
+## Abre a página do multijogador, com uma mensagem (ex.: o amigo saiu do jogo).
+func open_wifi(message := "") -> void:
+	visible = true
+	_show("wifi")
+	if not message.is_empty():
+		_wifi_status.text = message
 
 
 func close() -> void:
@@ -78,6 +95,7 @@ func _build_home() -> void:
 	_play_btn = _big_button("Campanha", Color("#2f6fd6"), func() -> void: _show("campaign"))
 	box.add_child(_play_btn)
 	box.add_child(_big_button("Duelo livre", Color("#3b4a7a"), func() -> void: _show("duel")))
+	box.add_child(_big_button("Jogar com amigos (Wi-Fi)", Color("#2e7d6b"), func() -> void: _show("wifi")))
 	var row := _row()
 	row.add_child(_button("Hangar", func() -> void: _show("hangar"), 70))
 	row.add_child(_button("Como se joga", func() -> void: _show("help"), 90))
@@ -151,6 +169,88 @@ func _build_hangar() -> void:
 	_refresh_hangar()
 
 
+func _build_wifi() -> void:
+	var box := _page("wifi", 300)
+	box.add_child(_label("Jogar com amigos", 14))
+	box.add_child(_label("Liguem os dois telemóveis à mesma rede Wi-Fi (ou um faz hotspot para o outro).\nUm cria o jogo e o outro entra. Até 10 pontos, todos os aviões disponíveis.", 6, 0.8))
+	_wifi_planes = PlaneCarousel.new()
+	_wifi_planes.only_owned = false
+	_wifi_planes.selected = Game.plane_choice
+	_wifi_planes.changed.connect(func(id: String) -> void:
+		Game.plane_choice = id
+		Game.save_settings())
+	box.add_child(_wifi_planes)
+	_host_btn = _big_button("Criar jogo", Color("#2e9e4f"), _toggle_host)
+	box.add_child(_host_btn)
+	_wifi_hosts = VBoxContainer.new()
+	_wifi_hosts.add_theme_constant_override("separation", 3)
+	box.add_child(_wifi_hosts)
+	var ip_row := _row()
+	ip_row.add_child(_label("Entrar pelo IP:", 7, 0.85))
+	_ip_edit = LineEdit.new()
+	_ip_edit.placeholder_text = "192.168.1.20"
+	_ip_edit.custom_minimum_size = Vector2(100, 16)
+	_ip_edit.add_theme_font_size_override("font_size", 8)
+	_ip_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER_DECIMAL
+	_ip_edit.text_submitted.connect(func(_t: String) -> void: _join(_ip_edit.text.strip_edges()))
+	ip_row.add_child(_ip_edit)
+	ip_row.add_child(_button("Entrar", func() -> void: _join(_ip_edit.text.strip_edges()), 46))
+	box.add_child(ip_row)
+	_wifi_status = _label("", 7, 1.0, Config.WARN)
+	_wifi_status.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_wifi_status.custom_minimum_size = Vector2(290, 0)
+	box.add_child(_wifi_status)
+	box.add_child(_back_button())
+
+
+func _net_info() -> Dictionary:
+	return {
+		"plane": Game.plane_choice,
+		"colors": Progress.paint_colors(),
+		"w": Game.native_w,
+		"name": OS.get_model_name() if OS.get_model_name() != "GenericDevice" else OS.get_name(),
+	}
+
+
+func _toggle_host() -> void:
+	if Net.role == Net.Role.HOST:
+		Net.leave()
+		Net.start_browsing()
+		Net.status = ""
+	else:
+		Net.host_game(_net_info())
+	_refresh_wifi()
+
+
+func _join(ip: String) -> void:
+	if ip.is_empty():
+		return
+	Net.join(ip, _net_info())
+	_refresh_wifi()
+
+
+func _refresh_wifi() -> void:
+	if _wifi_hosts == null:
+		return
+	var hosting := Net.role == Net.Role.HOST
+	_host_btn.text = "Cancelar jogo" if hosting else "Criar jogo"
+	_wifi_status.text = Net.status
+	for c in _wifi_hosts.get_children():
+		c.queue_free()
+	if hosting:
+		return
+	if Net.hosts.is_empty():
+		_wifi_hosts.add_child(_label("A procurar jogos nesta rede…", 7, 0.7))
+	for ip in Net.hosts:
+		var h: Dictionary = Net.hosts[ip]
+		var who: String = h.name if not str(h.name).is_empty() else "jogo"
+		var b := _big_button("Entrar no jogo de %s  (%s)" % [who, ip], Color("#2f6fd6"), func() -> void: _join(ip))
+		if not h.compatible:
+			b.text = "%s: versão diferente, atualiza a app" % who
+			b.disabled = true
+		_wifi_hosts.add_child(b)
+
+
 func _build_help() -> void:
 	var box := _page("help", 350)
 	var text := RichTextLabel.new()
@@ -173,6 +273,7 @@ func _refresh_all() -> void:
 	_refresh_hangar()
 	_campaign_planes.refresh()
 	_duel_planes.refresh()
+	_wifi_planes.refresh()
 	_hangar_planes.refresh()
 
 
@@ -269,7 +370,14 @@ func _refresh_update() -> void:
 func _show(page: String) -> void:
 	for key in _pages:
 		_pages[key].visible = key == page
+	# só se procuram jogos na rede enquanto a página do multijogador está aberta
+	if page == "wifi":
+		Net.start_browsing()
+		_wifi_planes.selected = Game.plane_choice
+	elif not Net.connected:
+		Net.leave()
 	_refresh_all()
+	_refresh_wifi()
 
 
 func _page(key: String, width: float) -> VBoxContainer:

@@ -2,6 +2,7 @@ class_name Crate
 extends Node2D
 ## Caixa de powerup: cai devagar de paraquedas; apanha-se a voar contra ela.
 
+var nid := 0         ## identificador para o multijogador
 var kind := "shield"
 var landed := false
 var ground_t := 0.0

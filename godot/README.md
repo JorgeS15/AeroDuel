@@ -29,6 +29,7 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
   3. *Defender o hangar:* abater 4 bombardeiros antes que destruam o hangar.
   4. *O Ás Negro:* vencer o melhor piloto inimigo.
 - **Progresso** (guardado no telemóvel): moedas por abates, missões e estrelas novas. No **hangar** compras aviões, 3 melhorias por avião (motor, blindagem, metralhadora) e pinturas. Na campanha só podes usar os aviões que compraste; no duelo livre estão todos disponíveis.
+- **Multijogador na mesma rede Wi-Fi** (ou com um telemóvel a fazer hotspot): um telemóvel cria o jogo e o outro encontra-o na lista ou liga-se pelo IP. Duelo até 10 pontos, todos os aviões disponíveis, sem moedas.
 - **Bot:** 3 dificuldades e o "ás" das missões. Também vai buscar caixas e bombardeia alvos no chão.
 - **Ecrã inteiro:** a largura do mundo acompanha o formato do telemóvel, sem barras pretas.
 - **Controlos táteis** baixos, nos cantos, com zona de toque maior do que o desenho, e quase transparentes quando há um avião por trás. Multitoque, vibração e sons.
@@ -64,9 +65,11 @@ godot/
 │   ├── data/              tipos de dados (PlaneType)
 │   ├── game/              simulação: world, airplane, pilot, bot_brain, fx_layer, background
 │   ├── ui/                hud, main_menu, touch_button
-│   └── autoload/          Game (definições, teclas, tema) e Sfx (sons gerados por código)
+│   ├── net/               net_sync: fotografias do jogo para o multijogador
+│   └── autoload/          Game (definições, teclas, tema), Sfx (sons gerados por código), Net (multijogador), Progress, Updater
 └── tests/
     ├── sim_test.tscn      cada avião contra cada avião, 10 min por dificuldade e as missões jogadas por um bot (corre no CI)
+    ├── net_test.tscn      multijogador com dois processos (anfitrião e convidado), cada um jogado por um bot (corre no CI)
     └── screenshots.tscn   capturas de ecrã do menu e do jogo
 ```
 
@@ -80,5 +83,6 @@ godot --headless --path godot res://tests/sim_test.tscn
 
 - **Passo fixo:** a simulação corre a 60 passos por segundo (`_physics_process`), por isso o comportamento é igual em qualquer telemóvel.
 - **Desenho:** por agora é feito em código (`_draw`). Mais tarde troca-se por sprites sem mexer na física.
-- **Efeitos:** som, partículas e mensagens passam todos por `World.fx()`. É esse o ponto que o multiplayer vai usar para reenviar eventos ao outro telemóvel.
+- **Efeitos:** som, partículas e mensagens passam todos por `World.fx()`. No multijogador, o anfitrião reenvia-os ao outro telemóvel.
+- **Multijogador** (`autoload/net.gd`, `net/net_sync.gd`): o anfitrião corre a simulação (modo `versus`) e envia 30 fotografias por segundo por ENet (porta UDP 27450). O convidado (modo `remote`) não simula: mostra as fotografias com 80 ms de atraso, a interpolar entre elas, e envia os seus controlos a cada passo. Os jogos anunciam-se por difusão UDP na porta 27451. A largura do mundo fica a do ecrã mais estreito; o mais largo mostra barras dos lados.
 - **Ecrã:** a altura lógica é sempre 216. A largura (`Config.W`, no mínimo 384) segue o formato do ecrã (`keep_height`).
