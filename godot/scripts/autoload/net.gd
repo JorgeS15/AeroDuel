@@ -18,6 +18,8 @@ signal fx_received(event: String, args: Array)
 
 const PORT := 27450
 const DISCOVERY_PORT := 27451
+const PROBE_PORT := 27452               ## diagnóstico: "estás aí?" do convidado, "sim" do anfitrião
+const CONNECT_TIMEOUT := 10.0
 const PROTOCOL := 1                     ## sobe quando a rede deixa de ser compatível
 const ANNOUNCE_EVERY := 1.0
 const HOST_TIMEOUT := 3.5               ## segundos sem anúncio até um jogo sair da lista
@@ -45,6 +47,11 @@ var _eject_n := 0                       ## convidado: quantas vezes carregou em 
 var _bomb_n := 0
 var _seen_eject := 0                    ## anfitrião: o último contador recebido
 var _seen_bomb := 0
+var _probe: PacketPeerUDP               ## anfitrião: responde aos toques; convidado: envia-os
+var _probe_t := 0.0
+var _connect_t := 0.0                   ## convidado: segundos a tentar ligar
+var _host_ip := ""
+var _host_answered := false             ## convidado: o anfitrião respondeu ao toque
 
 
 func _ready() -> void:
@@ -83,6 +90,9 @@ func host_game(info: Dictionary) -> bool:
 	_udp = PacketPeerUDP.new()
 	_udp.set_broadcast_enabled(true)
 	_announce_t = 0.0
+	_probe = PacketPeerUDP.new()
+	if _probe.bind(PROBE_PORT) != OK:
+		_probe = null
 	var ips := local_ips()
 	_set_status("À espera de um amigo…" + ("   O teu IP: " + ", ".join(ips) if not ips.is_empty() else ""))
 	return true
@@ -124,6 +134,12 @@ func join(ip: String, info: Dictionary) -> bool:
 	multiplayer.multiplayer_peer = peer
 	role = Role.CLIENT
 	my_info = info
+	_host_ip = ip
+	_host_answered = false
+	_connect_t = 0.0
+	_probe_t = 0.0
+	_probe = PacketPeerUDP.new()
+	_probe.set_dest_address(ip, PROBE_PORT)
 	_set_status("A ligar a %s…" % ip)
 	return true
 
@@ -134,6 +150,9 @@ func leave() -> void:
 	if _udp != null:
 		_udp.close()
 		_udp = null
+	if _probe != null:
+		_probe.close()
+		_probe = null
 	if multiplayer.multiplayer_peer != null and not multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
 		multiplayer.multiplayer_peer.close()
 		multiplayer.multiplayer_peer = null
@@ -160,7 +179,8 @@ func _set_status(text: String) -> void:
 # ---------- eventos da ligação ----------
 
 func _on_peer_connected(_id: int) -> void:
-	pass   # o anfitrião espera pela apresentação (_rpc_hello)
+	if role == Role.HOST:
+		_set_status("Um amigo está a entrar…")   # falta a apresentação (_rpc_hello)
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -169,12 +189,22 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
+	if _probe != null:
+		_probe.close()
+		_probe = null
 	_set_status("Ligado. A preparar o jogo…")
 	_rpc_hello.rpc_id(1, PROTOCOL, my_info)
 
 
 func _on_connection_failed() -> void:
-	_end("Não foi possível ligar. Confirma que estão os dois na mesma rede Wi-Fi.")
+	_end(_failure_text())
+
+
+## Porque é que não liga, conforme o anfitrião respondeu ou não ao toque.
+func _failure_text() -> String:
+	if _host_answered:
+		return "O telemóvel do anfitrião responde, mas o jogo não liga (a porta %d está bloqueada?). Experimentem com um telemóvel a fazer hotspot para o outro." % PORT
+	return "O telemóvel do anfitrião (%s) não responde. Esta rede Wi-Fi não deixa os aparelhos falarem diretamente uns com os outros (acontece em redes de convidados e em alguns routers). Experimentem: um telemóvel faz hotspot e o outro liga-se a esse hotspot. Se o Wi-Fi não tiver internet, desliguem também os dados móveis." % _host_ip
 
 
 func _on_server_disconnected() -> void:
@@ -308,6 +338,7 @@ func _rpc_rematch() -> void:
 
 func _physics_process(dt: float) -> void:
 	_clock += dt
+	_step_probe(dt)
 	if role == Role.HOST and not connected and _udp != null:
 		_announce_t -= dt
 		if _announce_t <= 0.0:
@@ -319,6 +350,33 @@ func _physics_process(dt: float) -> void:
 		_frame += 1
 		if _frame % SNAP_EVERY == 0:
 			_rpc_snap.rpc_id(_peer_id, NetSync.capture(world))
+
+
+## Diagnóstico da ligação: o convidado envia "estás aí?" diretamente ao anfitrião
+## enquanto tenta ligar; o anfitrião responde. Se a resposta não chega, o problema é a rede.
+func _step_probe(dt: float) -> void:
+	if _probe == null:
+		return
+	if role == Role.HOST:
+		while _probe.get_available_packet_count() > 0:
+			var msg := _probe.get_packet().get_string_from_utf8()
+			if msg == GAME_TAG + "?":
+				_probe.set_dest_address(_probe.get_packet_ip(), _probe.get_packet_port())
+				_probe.put_packet((GAME_TAG + "!").to_utf8_buffer())
+				if not connected and multiplayer.get_peers().is_empty():
+					_set_status("Um amigo (%s) está a tentar entrar…" % _probe.get_packet_ip())
+	elif role == Role.CLIENT and not connected:
+		while _probe.get_available_packet_count() > 0:
+			if _probe.get_packet().get_string_from_utf8() == GAME_TAG + "!" and not _host_answered:
+				_host_answered = true
+				_set_status("O anfitrião responde. A ligar…")
+		_probe_t -= dt
+		if _probe_t <= 0.0:
+			_probe_t = 0.5
+			_probe.put_packet((GAME_TAG + "?").to_utf8_buffer())
+		_connect_t += dt
+		if _connect_t > CONNECT_TIMEOUT:
+			_end(_failure_text())
 
 
 func _announce() -> void:
