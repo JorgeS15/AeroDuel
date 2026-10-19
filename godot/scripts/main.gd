@@ -7,6 +7,7 @@ var state := State.MENU
 var world: World
 var hud: Hud
 var menu: MainMenu
+var mission_index := -1      ## missão em curso (-1 = duelo livre)
 
 
 func _ready() -> void:
@@ -20,21 +21,51 @@ func _ready() -> void:
 	menu = MainMenu.new()
 	add_child(menu)
 
-	menu.play_pressed.connect(start_game)
+	menu.duel_pressed.connect(start_duel)
+	menu.mission_pressed.connect(start_mission)
 	world.message.connect(hud.show_message)
 	world.game_over.connect(_on_game_over)
+	world.mission_finished.connect(_on_mission_finished)
 	hud.pause_pressed.connect(func() -> void: set_paused(true))
 	hud.resume_pressed.connect(func() -> void: set_paused(false))
-	hud.again_pressed.connect(start_game)
+	hud.again_pressed.connect(start_duel)
+	hud.retry_pressed.connect(func() -> void: start_mission(mission_index))
+	hud.next_mission_pressed.connect(func() -> void: start_mission(mission_index + 1))
 	hud.menu_pressed.connect(go_menu)
 	hud.eject_pressed.connect(func() -> void: world.player_input.eject = true)
 	hud.bomb_pressed.connect(func() -> void: world.player_input.bomb = true)
 	go_menu()
 
 
-func start_game() -> void:
+func _player_opts() -> Dictionary:
+	return {
+		"difficulty": Game.difficulty,
+		"player_type": Progress.player_plane_type(Game.plane_choice),
+		"player_colors": Progress.paint_colors(),
+	}
+
+
+## Duelo livre: todos os aviões disponíveis (com as melhorias compradas).
+func start_duel() -> void:
+	mission_index = -1
+	_begin("solo", _player_opts())
+
+
+func start_mission(index: int) -> void:
+	if index < 0 or index >= Campaign.count() or not Progress.mission_unlocked(index):
+		go_menu()
+		return
+	mission_index = index
+	if not Progress.owns_plane(Game.plane_choice):
+		Game.plane_choice = "biplane"
+	var opts := _player_opts()
+	opts.mission = Campaign.mission(index)
+	_begin("mission", opts)
+
+
+func _begin(mode: String, opts: Dictionary) -> void:
 	get_tree().paused = false
-	world.start("solo", Game.difficulty, Game.plane_choice)
+	world.start(mode, opts)
 	menu.close()
 	hud.show_playing(true)
 	state = State.PLAYING
@@ -42,9 +73,12 @@ func start_game() -> void:
 
 func go_menu() -> void:
 	get_tree().paused = false
-	world.start("demo", Game.difficulty)
+	world.start("demo", { "difficulty": Game.difficulty })
 	hud.show_playing(false)
-	menu.open()
+	if mission_index >= 0:
+		menu.open_campaign()
+	else:
+		menu.open()
 	state = State.MENU
 
 
@@ -62,9 +96,22 @@ func set_paused(on: bool) -> void:
 func _on_game_over(winner_id: int) -> void:
 	state = State.OVER
 	var won := winner_id == world.me
+	var coins := world.kills * Progress.COINS_PER_KILL + (Progress.COINS_DUEL_WIN if won else 0)
+	Progress.add_coins(coins)
 	get_tree().create_timer(0.9).timeout.connect(func() -> void:
 		if state == State.OVER:
-			hud.show_over(won))
+			hud.show_over(won, coins))
+
+
+func _on_mission_finished(result: Dictionary) -> void:
+	state = State.OVER
+	var m := Campaign.mission(mission_index)
+	var stars := Campaign.stars_for(m, result)
+	var coins := Progress.record_mission(m.id, stars, result.kills)
+	var has_next := mission_index + 1 < Campaign.count()
+	get_tree().create_timer(0.9).timeout.connect(func() -> void:
+		if state == State.OVER:
+			hud.show_mission_result(result, stars, Campaign.star_labels(m), coins, has_next))
 
 
 func _physics_process(_dt: float) -> void:

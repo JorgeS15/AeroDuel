@@ -31,6 +31,13 @@ func _ready() -> void:
 			failures.append("%s: %d despistes sem tiros em %d perdas" % [difficulty, stats.self_crash, losses])
 		if stats.ejects == 0:
 			failures.append("%s: os bots nunca saltaram de paraquedas" % difficulty)
+	# missões da campanha, com um bot difícil no lugar do jogador
+	for i in Campaign.count():
+		var r := _play_mission(i)
+		var m := Campaign.mission(i)
+		print("missão %d %-22s %s  estrelas=%s" % [i + 1, m.title, JSON.stringify(r), str(Campaign.stars_for(m, r))])
+		if not r.has("won"):
+			failures.append("missão %d não terminou em 6 min" % (i + 1))
 	if failures.is_empty():
 		print("OK: simulação passou")
 		get_tree().quit(0)
@@ -40,11 +47,34 @@ func _ready() -> void:
 		get_tree().quit(1)
 
 
+func _play_mission(index: int) -> Dictionary:
+	var world := World.new()
+	add_child(world)
+	world.set_physics_process(false)
+	world.start("mission", { "mission": Campaign.mission(index), "player_type": World.plane_type("biplane") })
+	var me := world.sides[0]
+	me.is_bot = true
+	me.brain = BotBrain.new()
+	me.input = InputState.new()
+	me.difficulty = "dificil"
+	for p in world.planes:
+		if p.side == me:
+			p.side = me
+	var result := {}
+	world.mission_finished.connect(func(r: Dictionary) -> void: result.merge(r))   # (as lambdas não podem reatribuir variáveis locais)
+	for i in int(6.0 * 60.0 / DT):
+		world.step(DT)
+		if not result.is_empty():
+			break
+	world.queue_free()
+	return result
+
+
 func _simulate(difficulty: String, minutes: float, plane_a: String, plane_b: String) -> Dictionary:
 	var world := World.new()
 	add_child(world)
 	world.set_physics_process(false)   # avançamos à mão, o mais depressa possível
-	world.start("demo", difficulty)
+	world.start("demo", { "difficulty": difficulty })
 	# na demonstração os aviões são ao calhas: fixamos os que queremos testar
 	world.sides[0].plane_type = World.plane_type(plane_a)
 	world.sides[1].plane_type = World.plane_type(plane_b)

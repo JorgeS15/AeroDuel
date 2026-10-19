@@ -22,8 +22,9 @@ func _ready() -> void:
 
 ## A altura lógica é sempre 216; a largura segue o formato do ecrã (mín. 384).
 func update_world_width() -> void:
-	var size := get_viewport().get_visible_rect().size
-	Config.W = maxf(Config.BASE_W, roundf(size.x))
+	var win := Vector2(DisplayServer.window_get_size())
+	var aspect := win.x / maxf(win.y, 1.0)
+	Config.W = maxf(Config.BASE_W, roundf(aspect * Config.H))
 
 
 ## Texto curto para mostrar no ecrã, ex.: "v0.1.0 · build 7 · pr-2 · 81cb40b".

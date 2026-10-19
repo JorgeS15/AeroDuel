@@ -5,6 +5,8 @@ extends Node2D
 
 signal message(kind: String, side_id: int)
 signal game_over(winner_id: int)
+## Fim de uma missão da campanha. `result`: won, reason, time, kills, planes_lost, hangar_hp.
+signal mission_finished(result: Dictionary)
 
 ## Aviões disponíveis, pela ordem em que aparecem no menu (ficheiros em data/planes/).
 ## São carregados só quando são precisos: com preload, o .tres podia ser lido antes de o
@@ -12,7 +14,7 @@ signal game_over(winner_id: int)
 const PLANE_IDS := ["biplane", "fighter", "bomber", "triplane"]
 static var _plane_cache := {}
 
-var mode := "demo"           ## demo (bots no menu) | solo (jogador contra o bot)
+var mode := "demo"           ## demo (bots no menu) | solo (duelo livre) | mission (campanha)
 var me := 0                  ## lado controlado neste ecrã
 var difficulty := "normal"
 var time := 0.0
@@ -26,6 +28,15 @@ var bombs: Array[Bomb] = []
 var crate_t := 0.0            ## segundos até cair a próxima caixa
 var player_input := InputState.new()
 var bot_passive := false      ## modo de teste: o bot voa a direito e não dispara
+var powerups_enabled := true
+
+# missão em curso (vazio fora da campanha)
+var mission := {}
+var kills := 0                ## aviões inimigos destruídos
+var planes_lost := 0          ## aviões do jogador perdidos
+var balloons_destroyed := 0
+var hangar_hp := 0
+var balloons: Array[Balloon] = []
 
 var background: Background
 var fx_layer: FxLayer
@@ -55,10 +66,13 @@ static func random_plane_id() -> String:
 	return PLANE_IDS.pick_random()
 
 
-## `player_plane` / `bot_plane`: ids de PLANE_IDS ("" = ao calhas).
-func start(p_mode: String, p_difficulty: String, player_plane := "", bot_plane := "") -> void:
+## Começa um jogo novo. `opts` (tudo opcional):
+##   difficulty: String, player_type / bot_type: PlaneType (null = ao calhas),
+##   player_colors: [fuselagem, asas], mission: Dictionary (ver Campaign)
+func start(p_mode: String, opts := {}) -> void:
 	mode = p_mode
-	difficulty = p_difficulty
+	mission = opts.get("mission", {})
+	difficulty = opts.get("difficulty", "normal")
 	me = 0
 	time = 0.0
 	finished = false
@@ -69,19 +83,40 @@ func start(p_mode: String, p_difficulty: String, player_plane := "", bot_plane :
 	bullets.clear()
 	crates.clear()
 	bombs.clear()
+	balloons.clear()
 	crate_t = randf_range(4.0, 7.0)
 	fx_layer.clear()
 	background.rebuild()
 	player_input.clear()
+	kills = 0
+	planes_lost = 0
+	balloons_destroyed = 0
+	hangar_hp = int(mission.get("hangar_hp", 0))
+	powerups_enabled = mission.get("powerups", true)
+
 	var demo := mode == "demo"
-	var p0 := player_plane if not player_plane.is_empty() else random_plane_id()
-	var p1 := bot_plane if not bot_plane.is_empty() else random_plane_id()
+	var p0: PlaneType = opts.get("player_type", null)
+	if p0 == null:
+		p0 = plane_type(random_plane_id())
+	var p1: PlaneType = opts.get("bot_type", null)
+	var bot_def: Dictionary = mission.get("bot", {})
+	if not bot_def.is_empty():
+		difficulty = bot_def.get("difficulty", difficulty)
+		p1 = plane_type(bot_def.get("plane", "biplane")).duplicate()
+		p1.max_hp += int(bot_def.get("hp_bonus", 0))
+	if p1 == null:
+		p1 = plane_type(random_plane_id())
 	sides = [
-		Side.new(0, demo, InputState.new() if demo else player_input, plane_type(p0)),
-		Side.new(1, true, InputState.new(), plane_type(p1)),
+		Side.new(0, demo, InputState.new() if demo else player_input, p0),
+		Side.new(1, true, InputState.new(), p1),
 	]
+	sides[0].colors = opts.get("player_colors", [])
+	sides[1].colors = bot_def.get("colors", [])
+	sides[1].raid = bot_def.get("raid", false)
 	for s in sides:
 		spawn_plane(s)
+	if mission.get("goal", "") == "balloons":
+		_spawn_balloons(int(mission.target))
 
 
 func _physics_process(dt: float) -> void:
@@ -93,7 +128,8 @@ func step(dt: float) -> void:
 
 	for s in sides:
 		if s.is_bot:
-			s.brain.think(s, self, difficulty, dt, bot_passive and mode != "demo")
+			var diff := s.difficulty if not s.difficulty.is_empty() else difficulty
+			s.brain.think(s, self, diff, dt, bot_passive and mode != "demo")
 
 	for p in planes:
 		if not p.dead:
@@ -116,8 +152,12 @@ func step(dt: float) -> void:
 		s.input.eject = false
 		s.input.bomb = false
 
+	for bl in balloons:
+		bl.step(dt)
 	_remove_dead()
 	fx_layer.step(dt)
+	if not mission.is_empty() and not finished:
+		_check_mission()
 
 
 func _step_bullets(dt: float) -> void:
@@ -152,6 +192,13 @@ func _step_bullets(dt: float) -> void:
 				tear_chute(pl)
 				b.life = 0.0
 				break
+		if b.life <= 0.0 or b.shooter.id != me:
+			continue
+		for bl in balloons:
+			if not bl.dead and Config.dist2(b.pos, bl.position) < Balloon.HIT_RADIUS * Balloon.HIT_RADIUS:
+				_hit_balloon(bl, 1)
+				b.life = 0.0
+				break
 
 
 func _collisions() -> void:
@@ -166,6 +213,14 @@ func _collisions() -> void:
 				kill_pilot(pl)
 			elif pl.state == Pilot.State.CHUTE and Config.dist2(p.position, pl.chute_center()) < 49.0:
 				tear_chute(pl)
+	# avião do jogador contra balão
+	for p in planes:
+		if p.dead or p.falling or p.side.id != me:
+			continue
+		for bl in balloons:
+			if not bl.dead and Config.dist2(p.position, bl.position) < 81.0:
+				_hit_balloon(bl, 99)
+				hit_plane(p)
 	# avião contra avião
 	var alive := planes.filter(func(p: Airplane) -> bool: return not p.dead and not p.falling)
 	if alive.size() == 2 and alive[0].side != alive[1].side and Config.dist2(alive[0].position, alive[1].position) < 64.0:
@@ -189,11 +244,17 @@ func _remove_dead() -> void:
 			c.queue_free()
 	crates = crates.filter(func(c: Crate) -> bool: return not c.dead)
 	bombs = bombs.filter(func(b: Bomb) -> bool: return not b.exploded)
+	for bl in balloons:
+		if bl.dead:
+			bl.queue_free()
+	balloons = balloons.filter(func(bl: Balloon) -> bool: return not bl.dead)
 
 
 # ---------- Powerups e bombas ----------
 
 func _step_crates(dt: float) -> void:
+	if not powerups_enabled:
+		return
 	crate_t -= dt
 	if crate_t <= 0.0:
 		crate_t = randf_range(Powerups.SPAWN_MIN, Powerups.SPAWN_MAX)
@@ -256,6 +317,15 @@ func _explode(b: Bomb) -> void:
 	for pl in pilots:
 		if not pl.dead and pl.side != b.shooter and Config.dist2(at, pl.position) < r2:
 			kill_pilot(pl)
+	if b.shooter.id == me:
+		for bl in balloons:
+			if not bl.dead and Config.dist2(at, bl.position) < r2:
+				_hit_balloon(bl, 99)
+	# bomba inimiga sobre o hangar do jogador (missões de defesa)
+	if hangar_hp > 0 and b.shooter.id != me and at.y > Config.GROUND - 30.0 \
+			and absf(Config.dx_wrap(at.x, Config.hangar_x(me))) < 18.0:
+		hangar_hp -= 1
+		fx("hangar_hit", [hangar_hp])
 
 
 # ---------- Ações ----------
@@ -267,6 +337,8 @@ func spawn_plane(side: Side) -> Airplane:
 	planes.append(p)
 	side.ctrl = p
 	side.respawn = 0.0
+	if side.raid:
+		p.bombs = 99    # bombardeiro de ataque ao hangar: bombas sem fim
 	return p
 
 
@@ -366,11 +438,93 @@ func _award(loser: Side, points: int, kind: String) -> void:
 		return
 	if finished:
 		return
+	if kind.begins_with("plane"):
+		if loser.id == me:
+			planes_lost += 1
+		else:
+			kills += 1
 	fx("msg", [kind, loser.id])
-	if winner.score >= Config.WIN_SCORE:
+	if mode == "solo" and winner.score >= Config.WIN_SCORE:
 		finished = true
 		_sfx("win" if winner.id == me else "lose")
 		game_over.emit(winner.id)
+
+
+# ---------- Missões ----------
+
+func _spawn_balloons(n: int) -> void:
+	for i in n:
+		var bl := Balloon.new()
+		# espalhados pelo lado inimigo do mapa, a alturas diferentes
+		var x := Config.W * lerpf(0.35, 0.85, (i + 0.5) / n) + randf_range(-10, 10)
+		bl.setup(Vector2(x, randf_range(55.0, 135.0)))
+		entities.add_child(bl)
+		balloons.append(bl)
+
+
+func _hit_balloon(bl: Balloon, damage: int) -> void:
+	bl.hp -= damage
+	bl.hit_t = 0.12
+	if bl.hp > 0:
+		fx("hit", [bl.position, -1])
+		return
+	bl.dead = true
+	balloons_destroyed += 1
+	fx("boom", [bl.position, -1])
+	fx("msg", ["balloon", 1 - me])
+
+
+func _check_mission() -> void:
+	var target := int(mission.get("target", 1))
+	var done := false
+	match mission.get("goal", ""):
+		"kills":
+			done = kills >= target
+		"balloons":
+			done = balloons_destroyed >= target
+		"score":
+			done = sides[me].score >= target
+	if done:
+		_finish_mission(true, "")
+	elif mission.has("lose_bot_score") and sides[1 - me].score >= int(mission.lose_bot_score):
+		_finish_mission(false, "O inimigo chegou a %d pontos." % int(mission.lose_bot_score))
+	elif mission.has("time_limit") and time >= float(mission.time_limit):
+		_finish_mission(false, "O tempo acabou.")
+	elif mission.has("hangar_hp") and hangar_hp <= 0:
+		_finish_mission(false, "O teu hangar foi destruído.")
+
+
+func _finish_mission(won: bool, reason: String) -> void:
+	finished = true
+	_sfx("win" if won else "lose")
+	mission_finished.emit({
+		"won": won, "reason": reason, "time": time, "kills": kills,
+		"planes_lost": planes_lost, "hangar_hp": hangar_hp,
+	})
+
+
+## Texto curto do objetivo para o HUD, ex.: "Abatidos 1/3 · Inimigo 2/5 · 1:12".
+func mission_status_text() -> String:
+	if mission.is_empty():
+		return "Primeiro a %d" % Config.WIN_SCORE
+	var target := int(mission.get("target", 1))
+	var parts: Array[String] = []
+	match mission.get("goal", ""):
+		"kills":
+			parts.append("Abatidos %d/%d" % [kills, target])
+		"balloons":
+			parts.append("Balões %d/%d" % [balloons_destroyed, target])
+		"score":
+			parts.append("Pontos %d/%d" % [sides[me].score, target])
+	if mission.has("lose_bot_score"):
+		parts.append("Inimigo %d/%d" % [sides[1 - me].score, int(mission.lose_bot_score)])
+	if mission.has("hangar_hp"):
+		parts.append("Hangar %d/%d" % [hangar_hp, int(mission.hangar_hp)])
+	if mission.has("time_limit"):
+		parts.append("Resta " + Campaign.format_time(maxf(0.0, float(mission.time_limit) - time)))
+	else:
+		parts.append(Campaign.format_time(time))
+	return "  ·  ".join(parts)
 
 
 # ---------- Efeitos ----------
@@ -429,6 +583,10 @@ func fx(event: String, args: Array) -> void:
 			_sfx("hit")
 		"bomb_drop":
 			_sfx("eject")
+		"hangar_hit":
+			Input.vibrate_handheld(80)
+			if live:
+				message.emit("hangar_hit", me)
 
 
 func _sfx(name: String) -> void:
@@ -482,7 +640,11 @@ func player_hint() -> String:
 
 func message_text(kind: String, side_id: int) -> Array:
 	var mine := side_id == me
-	var foe := "Bot"
+	var foe := "Bot" if mission.is_empty() else "Inimigo"
+	if kind == "balloon":
+		return ["Balão destruído! %d/%d" % [balloons_destroyed, int(mission.get("target", 0))], Config.GOOD]
+	if kind == "hangar_hit":
+		return ["O hangar foi atingido! (%d/%d)" % [hangar_hp, int(mission.get("hangar_hp", 0))], Config.BAD]
 	if kind.begins_with("pickup:"):
 		var pname: String = Powerups.info(kind.substr(7)).name
 		return ["%s!" % pname, Powerups.info(kind.substr(7)).color] if mine else ["%s apanhou: %s" % [foe, pname], Config.WARN]
