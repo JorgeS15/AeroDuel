@@ -76,7 +76,7 @@ func go_menu() -> void:
 	world.start("demo", { "difficulty": Game.difficulty })
 	hud.show_playing(false)
 	if mission_index >= 0:
-		menu.open_campaign()
+		menu.open_campaign(mission_index)
 	else:
 		menu.open()
 	state = State.MENU
@@ -108,7 +108,7 @@ func _on_mission_finished(result: Dictionary) -> void:
 	var m := Campaign.mission(mission_index)
 	var stars := Campaign.stars_for(m, result)
 	var coins := Progress.record_mission(m.id, stars, result.kills)
-	var has_next := mission_index + 1 < Campaign.count()
+	var has_next := mission_index + 1 < Campaign.count() and Progress.mission_unlocked(mission_index + 1)
 	get_tree().create_timer(0.9).timeout.connect(func() -> void:
 		if state == State.OVER:
 			hud.show_mission_result(result, stars, Campaign.star_labels(m), coins, has_next))

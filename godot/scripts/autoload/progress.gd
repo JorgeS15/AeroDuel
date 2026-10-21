@@ -62,11 +62,18 @@ func total_stars() -> int:
 	return n
 
 
-## Uma missão abre quando a anterior foi cumprida.
+## Uma missão abre quando a anterior foi cumprida e, na primeira de uma região,
+## quando já há estrelas suficientes para essa região.
 func mission_unlocked(index: int) -> bool:
+	if total_stars() < region_stars_needed(Campaign.mission(index).region):
+		return false
 	if index == 0:
 		return true
 	return mission_stars(Campaign.mission(index - 1).id)[0]
+
+
+func region_stars_needed(region: int) -> int:
+	return int(Campaign.REGIONS[region].stars_needed)
 
 
 ## Guarda o resultado (fica o melhor) e devolve as moedas ganhas.

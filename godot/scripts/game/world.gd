@@ -36,11 +36,14 @@ var kills := 0                ## aviões inimigos destruídos
 var planes_lost := 0          ## aviões do jogador perdidos
 var balloons_destroyed := 0
 var hangar_hp := 0
+var wind := 0.0               ## vento horizontal (px/s): empurra aviões no ar, paraquedas e caixas
+var night := false
 var balloons: Array[Balloon] = []
 
 var background: Background
 var fx_layer: FxLayer
 var entities: Node2D
+var night_layer: NightLayer
 
 
 func _ready() -> void:
@@ -52,6 +55,9 @@ func _ready() -> void:
 	add_child(fx_layer)
 	entities = Node2D.new()
 	add_child(entities)
+	night_layer = NightLayer.new()
+	night_layer.world = self
+	add_child(night_layer)
 
 
 static func plane_type(id: String) -> PlaneType:
@@ -92,6 +98,9 @@ func start(p_mode: String, opts := {}) -> void:
 	planes_lost = 0
 	balloons_destroyed = 0
 	hangar_hp = int(mission.get("hangar_hp", 0))
+	wind = float(mission.get("wind", 0.0))
+	night = mission.get("night", false)
+	night_layer.queue_redraw()
 	powerups_enabled = mission.get("powerups", true)
 
 	var demo := mode == "demo"
@@ -269,6 +278,8 @@ func _step_crates(dt: float) -> void:
 		if c.dead:
 			continue
 		c.step(dt)
+		if not c.landed:
+			c.position.x = Config.wrap_x(c.position.x + wind * 0.6 * dt)
 		for p in planes:
 			if p.dead or p.falling or not p.manned:
 				continue
@@ -484,6 +495,8 @@ func _check_mission() -> void:
 			done = balloons_destroyed >= target
 		"score":
 			done = sides[me].score >= target
+		"survive":
+			done = time >= float(mission.target)
 	if done:
 		_finish_mission(true, "")
 	elif mission.has("lose_bot_score") and sides[1 - me].score >= int(mission.lose_bot_score):
@@ -516,14 +529,18 @@ func mission_status_text() -> String:
 			parts.append("Balões %d/%d" % [balloons_destroyed, target])
 		"score":
 			parts.append("Pontos %d/%d" % [sides[me].score, target])
+		"survive":
+			parts.append("Aguenta " + Campaign.format_time(maxf(0.0, float(mission.target) - time)))
 	if mission.has("lose_bot_score"):
 		parts.append("Inimigo %d/%d" % [sides[1 - me].score, int(mission.lose_bot_score)])
 	if mission.has("hangar_hp"):
 		parts.append("Hangar %d/%d" % [hangar_hp, int(mission.hangar_hp)])
 	if mission.has("time_limit"):
 		parts.append("Resta " + Campaign.format_time(maxf(0.0, float(mission.time_limit) - time)))
-	else:
+	elif mission.get("goal", "") != "survive":
 		parts.append(Campaign.format_time(time))
+	if wind != 0.0:
+		parts.append("Vento " + ("→" if wind > 0.0 else "←"))
 	return "  ·  ".join(parts)
 
 

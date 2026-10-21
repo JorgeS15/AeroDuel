@@ -22,6 +22,8 @@ var _duel_planes: PlaneCarousel
 var _campaign_planes: PlaneCarousel
 var _hangar_planes: PlaneCarousel
 var _mission_list: GridContainer
+var _region := 1
+var _region_label: Label
 var _hangar_body: VBoxContainer
 var _update_label: Label
 var _update_btn: Button
@@ -57,10 +59,24 @@ func open() -> void:
 	Updater.check()
 
 
-## Abre diretamente a página da campanha (ex.: ao sair de uma missão).
-func open_campaign() -> void:
+## Abre diretamente a página da campanha (ex.: ao sair de uma missão), na região
+## da missão indicada, ou na última região já aberta.
+func open_campaign(mission_index := -1) -> void:
 	visible = true
+	if mission_index >= 0:
+		_region = Campaign.mission(mission_index).region
+	else:
+		_region = 1
+		for r in Campaign.REGIONS:
+			if Progress.total_stars() >= Progress.region_stars_needed(r) and Progress.mission_unlocked(Campaign.region_missions(r)[0]):
+				_region = r
 	_show("campaign")
+
+
+func _change_region(step: int) -> void:
+	var n := Campaign.REGIONS.size()
+	_region = (_region - 1 + step + n) % n + 1
+	_refresh_missions()
 
 
 func close() -> void:
@@ -114,7 +130,14 @@ func _build_duel() -> void:
 
 func _build_campaign() -> void:
 	var box := _page("campaign", 340)
-	box.add_child(_label("Campanha · Região 1: %s" % Campaign.REGIONS[1].name, 11))
+	var head := _row()
+	var prev := _button("◀", func() -> void: _change_region(-1), 20)
+	head.add_child(prev)
+	_region_label = _label("", 11)
+	_region_label.custom_minimum_size = Vector2(220, 0)
+	head.add_child(_region_label)
+	head.add_child(_button("▶", func() -> void: _change_region(1), 20))
+	box.add_child(head)
 	box.add_child(_coins_label())
 	_mission_list = GridContainer.new()
 	_mission_list.columns = 2
@@ -181,7 +204,12 @@ func _refresh_missions() -> void:
 		return
 	for c in _mission_list.get_children():
 		c.queue_free()
-	for i in Campaign.count():
+	var region: Dictionary = Campaign.REGIONS[_region]
+	var need := Progress.region_stars_needed(_region)
+	_region_label.text = "Região %d: %s" % [_region, region.name]
+	if Progress.total_stars() < need:
+		_region_label.text += "   (precisa de %d ★)" % need
+	for i in Campaign.region_missions(_region):
 		var m := Campaign.mission(i)
 		var unlocked := Progress.mission_unlocked(i)
 		var card := VBoxContainer.new()
@@ -194,7 +222,10 @@ func _refresh_missions() -> void:
 		b.disabled = not unlocked
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card.add_child(b)
-		var brief := _label(m.brief if unlocked else "Cumpre a missão anterior para abrir.", 6, 0.75, Color.WHITE, false)
+		var locked_text := "Cumpre a missão anterior para abrir."
+		if Progress.total_stars() < Progress.region_stars_needed(_region):
+			locked_text = "Precisas de %d estrelas para abrir esta região (tens %d)." % [Progress.region_stars_needed(_region), Progress.total_stars()]
+		var brief := _label(m.brief if unlocked else locked_text, 6, 0.75, Color.WHITE, false)
 		brief.autowrap_mode = TextServer.AUTOWRAP_WORD
 		brief.custom_minimum_size = Vector2(160, 0)
 		card.add_child(brief)

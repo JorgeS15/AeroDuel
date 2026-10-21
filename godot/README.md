@@ -23,11 +23,10 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
 | + | Reparação | Vida cheia |
 | B | Bombas | 2 bombas: botão BOMBA ou tecla B. Rebentam no chão ou ao tocar num avião e apanham aviões e pilotos à volta |
 
-- **Campanha:** 4 missões na região 1 (Costa), cada uma com até 3 estrelas: cumprir, uma condição extra e um tempo de referência.
-  1. *Primeiro voo:* abater 3 aviões.
-  2. *Balões de observação:* destruir 4 balões contra o relógio.
-  3. *Defender o hangar:* abater 4 bombardeiros antes que destruam o hangar.
-  4. *O Ás Negro:* vencer o melhor piloto inimigo.
+- **Campanha:** 12 missões em 3 regiões, cada uma com até 3 estrelas: cumprir, uma condição extra e um tempo de referência (ou um número de abates). As regiões 2 e 3 abrem com 6 e 14 estrelas.
+  - **Região 1, Costa:** *Primeiro voo* (abater 3 aviões), *Balões de observação* (4 balões contra o relógio), *Defender o hangar* (bombardeiros) e *O Ás Negro*.
+  - **Região 2, Montanhas, com vento** que empurra aviões, paraquedas e caixas: *Vento cruzado*, *Balões na serra*, *Aguentar a posição* (resistir 1 min 15 s) e *Raide na montanha*.
+  - **Região 3, Frente, de noite** (vê-se pior): *Patrulha noturna*, *Balões ao luar*, *Última defesa* e *O regresso do Ás*.
 - **Progresso** (guardado no telemóvel): moedas por abates, missões e estrelas novas. No **hangar** compras aviões, 3 melhorias por avião (motor, blindagem, metralhadora) e pinturas. Na campanha só podes usar os aviões que compraste; no duelo livre estão todos disponíveis.
 - **Bot:** 3 dificuldades e o "ás" das missões. Também vai buscar caixas e bombardeia alvos no chão.
 - **Ecrã inteiro:** a largura do mundo acompanha o formato do telemóvel, sem barras pretas.
