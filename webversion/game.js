@@ -19,7 +19,8 @@ const MAX_HP = 3;
 const WIN_SCORE = 10;
 const RESPAWN_TIME = 2.5;
 const HANGAR_X = [36, W - 36];
-const WALK_SPEED = 16;
+const WALK_SPEED = 32;
+const ROLL_SPEED = 9;   // unidades de `roll` por segundo (~0,2 s por meio-tonneau)
 
 // ---------- Rede ----------
 const SNAP_HZ = 25;              // snapshots por segundo enviados pelo anfitrião
@@ -129,6 +130,16 @@ function resetWorld(kind) {
   spawnPlane(sides[1]);
 }
 
+// Orientação do desenho. No ar o avião fica como o jogador o deixa: se fizer meio
+// looping, continua a voar de costas. Só no chão fica sempre direito; a mudança é
+// animada como um tonneau curto. `st` guarda upright/roll (o próprio avião, ou no
+// convidado o estado cosmético desse avião).
+function updateRoll(p, st, dt) {
+  if (p.onGround) st.upright = Math.cos(p.a) >= 0 ? 1 : -1;
+  const d = st.upright - st.roll;
+  st.roll += Math.sign(d) * Math.min(Math.abs(d), ROLL_SPEED * dt);
+}
+
 function spawnPlane(side) {
   const right = side.id === 0;
   const p = {
@@ -137,6 +148,7 @@ function spawnPlane(side) {
     a: right ? 0 : Math.PI, speed: 0, fallVy: 0,
     hp: MAX_HP, onGround: true, stalled: false, falling: false, manned: true,
     cd: 0.4, spin: 0, smokeT: 0, hitT: 0, prop: 0, dead: false,
+    upright: right ? 1 : -1, roll: right ? 1 : -1,
   };
   planes.push(p);
   side.ctrl = p;
@@ -372,6 +384,7 @@ function updatePlane(p, dt) {
   }
 
   emitSmoke(p, dt);
+  updateRoll(p, p, dt);
 
   // disparar
   if (flying && inp.fire && p.cd <= 0) {
@@ -670,7 +683,13 @@ function guestFrame(dt) {
 
   for (const p of planes) {
     let c = guestCosmetic.get(p.id);
-    if (!c) { c = { smokeT: 0, prop: 0 }; guestCosmetic.set(p.id, c); }
+    if (!c) {
+      const up = Math.cos(p.a) >= 0 ? 1 : -1;
+      c = { smokeT: 0, prop: 0, upright: up, roll: up };
+      guestCosmetic.set(p.id, c);
+    }
+    updateRoll(p, c, dt);
+    p.roll = c.roll;
     p.smokeT = c.smokeT;
     emitSmoke(p, dt);
     c.smokeT = p.smokeT;
@@ -785,7 +804,7 @@ function drawPlane(p) {
     ctx.save();
     ctx.translate(x, p.y);
     ctx.rotate(p.a);
-    if (Math.cos(p.a) < 0) ctx.scale(1, -1);   // nunca de pernas para o ar quando vai para a esquerda
+    ctx.scale(1, p.roll ?? 1);   // de costas se o jogador o virou; `roll` perto de 0 = a meio do tonneau
     const flashing = p.hitT > 0;
     // cauda e fuselagem
     ctx.fillStyle = flashing ? '#fff' : c.body;
