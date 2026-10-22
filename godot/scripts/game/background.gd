@@ -29,7 +29,8 @@ func rebuild() -> void:
 
 func _process(delta: float) -> void:
 	for c in _clouds:
-		c.x = fmod(c.x + c.v * delta, Config.W + 60.0)
+		var v: float = c.v + (world.wind * 0.5 if world else 0.0)
+		c.x = fposmod(c.x + v * delta, Config.W + 60.0)
 	queue_redraw()
 
 
@@ -37,13 +38,22 @@ func _draw() -> void:
 	var w := Config.W
 	var g := Config.GROUND
 	# céu em degradé
-	var top := Color("#4ea8f0")
-	var bottom := Color("#cdeeff")
+	var night := world != null and world.night
+	var top := Color("#0b1430") if night else Color("#4ea8f0")
+	var bottom := Color("#34406e") if night else Color("#cdeeff")
 	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, g), Vector2(0, g)]),
 		PackedColorArray([top, top, bottom, bottom]))
-	draw_circle(Vector2(300, 34), 12, Color("#fff6c2"))
+	if night:
+		for i in 40:
+			var sx := fposmod(i * 97.3, w)
+			var sy := fposmod(i * 53.7, g * 0.6)
+			draw_rect(Rect2(sx, sy, 0.8, 0.8), Color(1, 1, 1, 0.5 + 0.4 * sin(i * 1.7 + (world.time if world else 0.0))))
+		draw_circle(Vector2(300, 34), 10, Color("#e8ecff"))
+		draw_circle(Vector2(304, 31), 9, top)   # lua em quarto crescente
+	else:
+		draw_circle(Vector2(300, 34), 12, Color("#fff6c2"))
 
-	var cloud := Color(1, 1, 1, 0.82)
+	var cloud := Color(0.55, 0.6, 0.75, 0.5) if night else Color(1, 1, 1, 0.82)
 	for c in _clouds:
 		var cx: float = c.x - 30.0
 		var cy: float = c.y
@@ -52,7 +62,7 @@ func _draw() -> void:
 		draw_circle(Vector2(cx + 8 * s, cy - 4 * s), 8 * s, cloud)
 		draw_circle(Vector2(cx + 17 * s, cy), 7 * s, cloud)
 
-	draw_colored_polygon(_hills, Color("#8cc98a"))
+	draw_colored_polygon(_hills, Color("#2f4a3a") if night else Color("#8cc98a"))
 
 	for tf in TREES:
 		var tx: float = tf * w

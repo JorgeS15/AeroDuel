@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths: ["godot/**", "ci/**", ".github/workflows/android.yml"]
   pull_request:
     paths: ["godot/**", "ci/**", ".github/workflows/android.yml"]
@@ -87,6 +87,7 @@ jobs:
           set -euo pipefail
           if [ -n "$PR_NUMBER" ]; then CHANNEL="pr-$PR_NUMBER";
           elif [ "$GITHUB_REF_NAME" = "main" ]; then CHANNEL="latest";
+          elif [ "$GITHUB_REF_NAME" = "dev" ]; then CHANNEL="dev";
           else CHANNEL=""; fi
           VERSION=$(sed -n 's/^config\/version="\(.*\)"/\1/p' godot/project.godot)
           BUILD=$GITHUB_RUN_NUMBER
@@ -137,6 +138,7 @@ jobs:
 
       # O APK fica também num release, para se descarregar diretamente (sem .zip):
       #   main     -> release "latest"   (link fixo para a versão mais recente)
+      #   dev      -> release "dev"      (versão de desenvolvimento: tudo junto, antes do main)
       #   PR n.º N -> release "pr-N"     (versão de teste desse PR)
       # O build.json vai junto: é o que a app consulta para saber se há atualização.
       - name: Publicar APK para download direto
@@ -150,6 +152,8 @@ jobs:
           cp godot/build.json build/build.json
           if [ "$CHANNEL" = "latest" ]; then
             TITLE="AeroDuel — versão mais recente"
+          elif [ "$CHANNEL" = "dev" ]; then
+            TITLE="AeroDuel — versão de desenvolvimento (dev)"
           else
             TITLE="AeroDuel — teste do ${CHANNEL/pr-/PR #}"
           fi

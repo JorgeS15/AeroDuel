@@ -23,11 +23,10 @@ Versão a sério do AeroDuel, feita em **Godot 4.5**. O que já tem:
 | + | Reparação | Vida cheia |
 | B | Bombas | 2 bombas: botão BOMBA ou tecla B. Rebentam no chão ou ao tocar num avião e apanham aviões e pilotos à volta |
 
-- **Campanha:** 4 missões na região 1 (Costa), cada uma com até 3 estrelas: cumprir, uma condição extra e um tempo de referência.
-  1. *Primeiro voo:* abater 3 aviões.
-  2. *Balões de observação:* destruir 4 balões contra o relógio.
-  3. *Defender o hangar:* abater 4 bombardeiros antes que destruam o hangar.
-  4. *O Ás Negro:* vencer o melhor piloto inimigo.
+- **Campanha:** 12 missões em 3 regiões, cada uma com até 3 estrelas: cumprir, uma condição extra e um tempo de referência (ou um número de abates). As regiões 2 e 3 abrem com 6 e 14 estrelas.
+  - **Região 1, Costa:** *Primeiro voo* (abater 3 aviões), *Balões de observação* (4 balões contra o relógio), *Defender o hangar* (bombardeiros) e *O Ás Negro*.
+  - **Região 2, Montanhas, com vento** que empurra aviões, paraquedas e caixas: *Vento cruzado*, *Balões na serra*, *Aguentar a posição* (resistir 1 min 15 s) e *Raide na montanha*.
+  - **Região 3, Frente, de noite** (vê-se pior): *Patrulha noturna*, *Balões ao luar*, *Última defesa* e *O regresso do Ás*.
 - **Progresso** (guardado no telemóvel): moedas por abates, missões e estrelas novas. No **hangar** compras aviões, 3 melhorias por avião (motor, blindagem, metralhadora) e pinturas. Na campanha só podes usar os aviões que compraste; no duelo livre estão todos disponíveis.
 - **Multijogador na mesma rede Wi-Fi** (ou com um telemóvel a fazer hotspot): um telemóvel cria o jogo e o outro encontra-o na lista ou liga-se pelo IP. Duelo até 10 pontos, todos os aviões disponíveis, sem moedas.
 - **Bot:** 3 dificuldades e o "ás" das missões. Também vai buscar caixas e bombardeia alvos no chão.
@@ -42,6 +41,7 @@ Para criar um avião novo, junta um `.tres` a `data/planes/` e o id a `World.PLA
 Cada build gera um APK que se descarrega diretamente, sem `.zip`:
 
 - **Versão mais recente (`main`):** https://github.com/JorgeS15/AeroDuel/releases/download/latest/AeroDuel.apk
+- **Versão de desenvolvimento (`dev`, com tudo o que está a ser testado):** https://github.com/JorgeS15/AeroDuel/releases/download/dev/AeroDuel.apk
 - **Versão de teste de um PR:** `…/releases/download/pr-<número>/AeroDuel.apk`, também listada em **Releases**.
 
 Abre o link no telemóvel, com sessão iniciada no GitHub enquanto o repositório for privado, e abre o `AeroDuel.apk`. Da primeira vez, o Android pede para autorizar a instalação de apps desta origem. O APK fica também em **Actions → Android APK** como artefacto `.zip`.

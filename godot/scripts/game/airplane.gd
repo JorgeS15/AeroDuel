@@ -113,6 +113,7 @@ func step(dt: float) -> void:
 	position.x = Config.wrap_x(position.x + cos(angle) * speed * dt)
 	if not on_ground:
 		position.y += sin(angle) * speed * dt + fall_vy * dt
+		position.x = Config.wrap_x(position.x + world.wind * dt)
 
 	# teto
 	if position.y < 6.0:

@@ -37,7 +37,7 @@ func step(dt: float) -> void:
 				state = State.CHUTE
 				world.fx("chute", [])
 		State.CHUTE:
-			vel.x += (dir * 22.0 - vel.x) * 2.0 * dt
+			vel.x += (dir * 22.0 + world.wind - vel.x) * 2.0 * dt
 			vel.y += (16.0 - vel.y) * 3.0 * dt
 
 	if state != State.GROUND:
