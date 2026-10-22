@@ -4,6 +4,7 @@ extends Node2D
 
 var world: World
 var side: Side
+var nid := 0              ## identificador para o multijogador
 var type: PlaneType
 
 var angle := 0.0          ## 0 = para a direita; positivo roda no sentido dos ponteiros do relógio

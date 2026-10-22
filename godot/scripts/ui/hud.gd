@@ -155,6 +155,8 @@ func _ready() -> void:
 func show_playing(on: bool) -> void:
 	visible = on
 	_update_bot_label()
+	if _bot_btn:
+		_bot_btn.visible = not world.is_multiplayer()
 	_pause_panel.visible = false
 	_over_panel.visible = false
 	_result_panel.visible = false
@@ -169,9 +171,18 @@ func show_paused(on: bool) -> void:
 func show_over(won: bool, coins: int) -> void:
 	_over_title.text = "Ganhaste!" if won else "Perdeste!"
 	_over_title.add_theme_color_override("font_color", Config.GOOD if won else Config.BAD)
-	_over_score.text = "Tu %d — %d Bot   ·   +%d moedas" % [world.sides[world.me].score, world.sides[1 - world.me].score, coins]
+	_over_score.text = "Tu %d — %d %s" % [world.sides[world.me].score, world.sides[1 - world.me].score, world.foe_name()]
+	if coins >= 0:
+		_over_score.text += "   ·   +%d moedas" % coins
+	_over_panel.get_child(0).get_child(2).disabled = false
 	_over_panel.visible = true
 	_over_panel.get_child(0).get_child(2).grab_focus()
+
+
+## Multijogador: o convidado pediu outra partida e espera pelo anfitrião.
+func show_waiting() -> void:
+	_over_score.text = "À espera do anfitrião…"
+	_over_panel.get_child(0).get_child(2).disabled = true
 
 
 ## Ecrã de fim de missão. `stars`: [bool x3]; `labels`: texto de cada estrela.
@@ -207,7 +218,7 @@ func _process(delta: float) -> void:
 	for i in 2:
 		var s := world.sides[i]
 		_score[i].text = str(s.score)
-		_names[i].text = "TU" if i == world.me else ("BOT" if world.mission.is_empty() else "INIMIGO")
+		_names[i].text = "TU" if i == world.me else world.foe_name().to_upper()
 		if s.ctrl is Airplane:
 			_hp[i].set_hp((s.ctrl as Airplane).hp, (s.ctrl as Airplane).type.max_hp)
 		else:

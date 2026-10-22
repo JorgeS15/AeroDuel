@@ -12,7 +12,7 @@ config_version=5
 
 config/name="AeroDuel"
 config/description="Combate de biplanos 2D: abate o adversário e salta de paraquedas quando és atingido."
-config/version="0.1.0"
+config/version="0.2.0"
 run/main_scene="res://scenes/main.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.5", "GL Compatibility")
@@ -24,6 +24,7 @@ Game="*res://scripts/autoload/game.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 Updater="*res://scripts/autoload/updater.gd"
 Progress="*res://scripts/autoload/progress.gd"
+Net="*res://scripts/autoload/net.gd"
 
 [display]
 

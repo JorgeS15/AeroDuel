@@ -10,6 +10,8 @@ var sound_on := true
 var ui_theme: Theme
 ## Versão, n.º do build, canal (latest / pr-N) e commit deste APK.
 var build := { "version": "", "build": 0, "channel": "", "commit": "local" }
+## Largura do mundo que cabe neste ecrã (no multijogador pode ficar mais estreita).
+var native_w := Config.BASE_W
 
 
 func _ready() -> void:
@@ -24,7 +26,21 @@ func _ready() -> void:
 func update_world_width() -> void:
 	var win := Vector2(DisplayServer.window_get_size())
 	var aspect := win.x / maxf(win.y, 1.0)
-	Config.W = maxf(Config.BASE_W, roundf(aspect * Config.H))
+	native_w = maxf(Config.BASE_W, roundf(aspect * Config.H))
+	Config.W = native_w
+
+
+## Muda a largura do mundo. Mais estreita do que o ecrã (multijogador com um telemóvel
+## mais estreito do que este) fica centrada, com barras dos lados.
+func set_world_width(w: float) -> void:
+	Config.W = w
+	var win := get_window()
+	if is_equal_approx(w, native_w):
+		win.content_scale_size = Vector2i(int(Config.BASE_W), int(Config.H))
+		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_HEIGHT
+	else:
+		win.content_scale_size = Vector2i(int(w), int(Config.H))
+		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 
 
 ## Texto curto para mostrar no ecrã, ex.: "v0.1.0 · build 7 · pr-2 · 81cb40b".

@@ -6,6 +6,7 @@ enum State { FREE, CHUTE, GROUND }
 
 var world: World
 var side: Side
+var nid := 0          ## identificador para o multijogador
 var vel := Vector2.ZERO
 var state := State.FREE
 var torn := false          ## paraquedas rasgado: já não abre
