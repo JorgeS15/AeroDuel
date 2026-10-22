@@ -25,6 +25,7 @@ var _hangar_planes: PlaneCarousel
 var _mission_list: GridContainer
 var _region := 1
 var _region_label: Label
+var _card_w := 160.0
 var _hangar_body: VBoxContainer
 var _update_label: Label
 var _update_btn: Button
@@ -147,14 +148,18 @@ func _build_duel() -> void:
 
 
 func _build_campaign() -> void:
-	var box := _page("campaign", 340)
+	# a página ocupa a largura do ecrã (as descrições ficam com menos linhas) e o
+	# "Voltar" vai na linha das regiões, para tudo caber na altura de um telemóvel
+	var width := minf(Config.W - 16.0, 460.0)
+	_card_w = (width - 28.0) * 0.5
+	var box := _page("campaign", width)
 	var head := _row()
-	var prev := _button("◀", func() -> void: _change_region(-1), 20)
-	head.add_child(prev)
+	head.add_child(_button("Voltar", func() -> void: _show("home"), 46))
+	head.add_child(_button("◀", func() -> void: _change_region(-1), 22))
 	_region_label = _label("", 11)
-	_region_label.custom_minimum_size = Vector2(220, 0)
+	_region_label.custom_minimum_size = Vector2(minf(220.0, width - 150.0), 0)
 	head.add_child(_region_label)
-	head.add_child(_button("▶", func() -> void: _change_region(1), 20))
+	head.add_child(_button("▶", func() -> void: _change_region(1), 22))
 	box.add_child(head)
 	box.add_child(_coins_label())
 	_mission_list = GridContainer.new()
@@ -169,7 +174,6 @@ func _build_campaign() -> void:
 		Game.plane_choice = id
 		Game.save_settings())
 	box.add_child(_campaign_planes)
-	box.add_child(_back_button())
 	_refresh_missions()
 
 
@@ -319,7 +323,7 @@ func _refresh_missions() -> void:
 		var stars := ""
 		for st in got:
 			stars += "★" if st else "☆"
-		var b := _button("%d. %s   %s" % [i + 1, m.title, stars if unlocked else "(bloqueada)"], func() -> void: mission_pressed.emit(i), 160)
+		var b := _button("%d. %s   %s" % [i + 1, m.title, stars if unlocked else "(bloqueada)"], func() -> void: mission_pressed.emit(i), int(_card_w))
 		b.disabled = not unlocked
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card.add_child(b)
@@ -328,7 +332,7 @@ func _refresh_missions() -> void:
 			locked_text = "Precisas de %d estrelas para abrir esta região (tens %d)." % [Progress.region_stars_needed(_region), Progress.total_stars()]
 		var brief := _label(m.brief if unlocked else locked_text, 6, 0.75, Color.WHITE, false)
 		brief.autowrap_mode = TextServer.AUTOWRAP_WORD
-		brief.custom_minimum_size = Vector2(160, 0)
+		brief.custom_minimum_size = Vector2(_card_w, 0)
 		card.add_child(brief)
 		_mission_list.add_child(card)
 
@@ -420,7 +424,8 @@ func _page(key: String, width: float) -> VBoxContainer:
 	panel.custom_minimum_size = Vector2(width, 0)
 	var place := func() -> void:
 		panel.reset_size()
-		panel.position = (Vector2(Config.W, Config.H) - panel.size) * 0.5
+		# centrada, mas nunca a sair do ecrã por cima (o topo tem os títulos e as setas)
+		panel.position = ((Vector2(Config.W, Config.H) - panel.size) * 0.5).max(Vector2(2, 2))
 	panel.resized.connect(place)
 	box.resized.connect(place)
 	place.call_deferred()
